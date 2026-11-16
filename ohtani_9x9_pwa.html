@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ohtani 9x9 Execution</title>
+    
+    <!-- PWA Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Ohtani 9x9">
+    <meta name="theme-color" content="#0E95E8">
+
+    <!-- Fonts & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        brand: { blue: '#0E95E8', light: '#E6F4FD', paper: '#FAF9F6' }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #F3F4F6;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* Circular Checkbox Styling */
+        .circular-checkbox {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 24px;
+            height: 24px;
+            border: 2px solid #D1D5DB;
+            border-radius: 50%;
+            outline: none;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.2s ease-in-out;
+            flex-shrink: 0;
+        }
+
+        .circular-checkbox:checked {
+            background-color: #0E95E8;
+            border-color: #0E95E8;
+        }
+
+        .circular-checkbox:checked::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -60%) rotate(45deg);
+            width: 6px;
+            height: 12px;
+            border: solid white;
+            border-width: 0 2px 2px 0;
+        }
+
+        /* Task text strikethrough transition */
+        .task-text { transition: color 0.2s, text-decoration-color 0.2s; }
+        .task-checked { color: #9CA3AF; text-decoration: line-through; }
+
+        /* Matrix 9x9 CSS Grid Styles */
+        .matrix-grid {
+            display: grid;
+            grid-template-columns: repeat(9, 1fr);
+            gap: 1px;
+            background-color: #D1D5DB; /* Acts as 1px thin border */
+            border: 2px solid #4B5563; /* Outer thick border */
+            padding: 1px;
+            width: 100%;
+            aspect-ratio: 1 / 1;
+        }
+        
+        .matrix-cell {
+            background-color: #FAF9F6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.65rem;
+            text-align: center;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            word-break: break-word;
+            padding: 2px;
+        }
+
+        /* Sub-grid thick borders (every 3rd cell) */
+        .matrix-cell.border-r-thick { border-right: 2px solid #4B5563; }
+        .matrix-cell.border-b-thick { border-bottom: 2px solid #4B5563; }
+        
+        .matrix-center { background-color: #0E95E8; color: white; font-weight: bold; font-size: 0.75rem;}
+        .matrix-hub { background-color: #E6F4FD; font-weight: 600; color: #1E3A8A; font-size: 0.7rem; }
+
+        /* Hide Scrollbar for Matrix wrapper */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* Modal Animation */
+        #cell-modal { transition: opacity 0.2s ease-in-out; }
+        #cell-modal.hidden { opacity: 0; pointer-events: none; }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-900 h-screen flex flex-col overflow-hidden">
+
+    <!-- Top Header -->
+    <header class="bg-brand-blue text-white p-4 font-bold text-center shadow-md z-20 flex-shrink-0 flex items-center justify-center">
+        <i class="fa-solid fa-layer-group mr-2"></i> Ohtani 9x9
+    </header>
+
+    <!-- Main Content Area -->
+    <div class="flex-1 overflow-y-auto pb-24 relative bg-white" id="main-scroll-area">
+        
+        <!-- ==================== TAB 1: TODAY ==================== -->
+        <main id="tab-today" class="tab-pane p-4 block">
+            
+            <!-- Locked 3 Tasks -->
+            <section class="mb-8">
+                <h2 class="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center">
+                    <i class="fa-solid fa-lock mr-2 text-brand-blue"></i> Today's Core (Locked)
+                </h2>
+                <div class="bg-brand-light rounded-xl border border-blue-100 p-1 shadow-sm" id="locked-tasks-container">
+                    <!-- JS Populated -->
+                </div>
+            </section>
+
+            <!-- Custom To-Do List -->
+            <section>
+                <h2 class="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center">
+                    <i class="fa-solid fa-list-ul mr-2 text-gray-400"></i> Custom Tasks
+                </h2>
+                
+                <form id="add-task-form" class="flex gap-2 mb-4">
+                    <input type="text" id="new-task-input" placeholder="Add a custom task..." class="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent">
+                    <button type="submit" class="bg-gray-800 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-700 active:scale-95 transition-transform">
+                        Add
+                    </button>
+                </form>
+
+                <div id="custom-tasks-container" class="space-y-1">
+                    <!-- JS Populated -->
+                </div>
+            </section>
+        </main>
+
+        <!-- ==================== TAB 2: MATRIX ==================== -->
+        <main id="tab-matrix" class="tab-pane p-4 hidden">
+            <h2 class="text-lg font-bold text-gray-800 mb-2 text-center">Master Plan</h2>
+            <p class="text-xs text-gray-500 text-center mb-4">Pan/zoom the grid. Tap any cell for details.</p>
+            
+            <!-- Scrollable container for smaller screens -->
+            <div class="w-full overflow-x-auto no-scrollbar pb-4 flex justify-center">
+                <div class="min-w-[340px] max-w-[500px] w-full mx-auto" id="matrix-container">
+                    <div class="matrix-grid shadow-lg rounded-sm" id="matrix-grid">
+                        <!-- JS Populated (81 cells) -->
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- ==================== TAB 3: STATS ==================== -->
+        <main id="tab-stats" class="tab-pane p-4 hidden">
+             <h2 class="text-lg font-bold text-gray-800 mb-6 text-center">Direction Balance</h2>
+             <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 aspect-square w-full max-w-[400px] mx-auto flex items-center justify-center">
+                 <canvas id="radarChart"></canvas>
+             </div>
+             
+             <div class="mt-6 grid grid-cols-2 gap-4">
+                 <div class="bg-brand-light rounded-xl p-4 text-center">
+                     <div class="text-3xl font-bold text-brand-blue" id="streak-counter">12</div>
+                     <div class="text-xs text-gray-600 font-medium uppercase mt-1">Day Streak</div>
+                 </div>
+                 <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
+                     <div class="text-3xl font-bold text-gray-800">85%</div>
+                     <div class="text-xs text-gray-600 font-medium uppercase mt-1">Matrix Completion</div>
+                 </div>
+             </div>
+        </main>
+    </div>
+
+    <!-- Bottom Navigation -->
+    <nav class="bg-white border-t border-gray-200 flex justify-around p-3 pb-6 fixed bottom-0 w-full shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)] z-20">
+        <button onclick="switchTab('today')" id="nav-today" class="nav-btn flex flex-col items-center text-brand-blue w-16">
+            <i class="fa-solid fa-calendar-day text-xl mb-1"></i>
+            <span class="text-[10px] font-semibold">Today</span>
+        </button>
+        <button onclick="switchTab('matrix')" id="nav-matrix" class="nav-btn flex flex-col items-center text-gray-400 w-16">
+            <i class="fa-solid fa-border-all text-xl mb-1"></i>
+            <span class="text-[10px] font-medium">Matrix</span>
+        </button>
+        <button onclick="switchTab('stats')" id="nav-stats" class="nav-btn flex flex-col items-center text-gray-400 w-16">
+            <i class="fa-solid fa-chart-pie text-xl mb-1"></i>
+            <span class="text-[10px] font-medium">Stats</span>
+        </button>
+    </nav>
+
+    <!-- Cell Detail Modal (Overlay) -->
+    <div id="cell-modal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center hidden">
+        <div class="bg-white w-11/12 max-w-md rounded-2xl p-6 shadow-2xl transform transition-all scale-100 mx-auto">
+            <div class="flex justify-between items-start mb-4">
+                <h3 id="modal-title" class="font-bold text-brand-blue text-sm uppercase tracking-wider">Direction</h3>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 p-1">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+            <div id="modal-type" class="inline-block bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded mb-3 font-semibold">Type</div>
+            <p id="modal-desc" class="text-gray-800 text-sm leading-relaxed mb-6">Description goes here.</p>
+            <button onclick="closeModal()" class="w-full bg-brand-blue text-white rounded-lg py-3 font-semibold active:bg-blue-600">Got it</button>
+        </div>
+    </div>
+
+    <!-- Application Logic -->
+    <script>
+        // --- State Management ---
+        const State = {
+            today: new Date().toISOString().split('T')[0],
+            customTasks: JSON.parse(localStorage.getItem('ohtani_custom_tasks')) || [],
+            lockedTasks: JSON.parse(localStorage.getItem(`ohtani_locked_${new Date().toISOString().split('T')[0]}`)) || null,
+            matrixData: []
+        };
+
+        // Static Master Task List (Sample representing the 8 directions)
+        const MASTER_TASKS = [
+            { dir: 'Backend', text: 'Write or debug C# / ASP.NET for 2 Pomodoros.' },
+            { dir: 'Frontend', text: 'Complete React/TS UI components without using "any".' },
+            { dir: 'Career', text: 'Send 3 tailored full-stack applications.' },
+            { dir: 'University', text: 'Dedicate 40 mins to Engineering Thesis.' },
+            { dir: 'Physique', text: 'Calisthenics workout & hit 2,800 kcal / 125g protein.' },
+            { dir: 'Dopamine', text: 'Zero Instagram Reels, strictly follow No-PMO.' },
+            { dir: 'Reading', text: 'Read 15 pages of non-fiction & complete 9 Pomodoros.' },
+            { dir: 'Character', text: 'Perform one concrete act of help/generosity.' }
+        ];
+
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            initMatrixData();
+            initLockedTasks();
+            renderCustomTasks();
+            renderMatrix();
+            
+            document.getElementById('add-task-form').addEventListener('submit', (e) => {
+                e.preventDefault();
+                addCustomTask();
+            });
+        });
+
+        // --- 1. Today Tab Logic ---
+        function initLockedTasks() {
+            // Generate tasks once per day
+            if (!State.lockedTasks) {
+                // Shuffle master tasks and pick 3
+                let shuffled = [...MASTER_TASKS].sort(() => 0.5 - Math.random());
+                State.lockedTasks = shuffled.slice(0, 3).map((t, idx) => ({
+                    id: `locked_${idx}`,
+                    dir: t.dir,
+                    text: t.text,
+                    completed: false
+                }));
+                saveLockedTasks();
+            }
+            renderLockedTasks();
+        }
+
+        function saveLockedTasks() {
+            localStorage.setItem(`ohtani_locked_${State.today}`, JSON.stringify(State.lockedTasks));
+        }
+
+        function renderLockedTasks() {
+            const container = document.getElementById('locked-tasks-container');
+            container.innerHTML = '';
+            
+            State.lockedTasks.forEach((task, index) => {
+                const div = document.createElement('div');
+                div.className = `flex items-start gap-3 p-3 bg-white rounded-lg mb-1 shadow-sm border border-gray-100`;
+                div.innerHTML = `
+                    <input type="checkbox" class="circular-checkbox mt-0.5" 
+                           ${task.completed ? 'checked' : ''} 
+                           onchange="toggleLockedTask(${index})">
+                    <div class="flex-1">
+                        <div class="text-[10px] font-bold text-brand-blue uppercase mb-0.5">${task.dir}</div>
+                        <p class="text-sm font-medium task-text ${task.completed ? 'task-checked' : 'text-gray-800'} leading-snug">
+                            ${task.text}
+                        </p>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function toggleLockedTask(index) {
+            State.lockedTasks[index].completed = !State.lockedTasks[index].completed;
+            saveLockedTasks();
+            renderLockedTasks();
+            updateChartState(); // Refresh stats chart visually
+        }
+
+        function saveCustomTasks() {
+            localStorage.setItem('ohtani_custom_tasks', JSON.stringify(State.customTasks));
+        }
+
+        function addCustomTask() {
+            const input = document.getElementById('new-task-input');
+            const text = input.value.trim();
+            if (!text) return;
+
+            State.customTasks.push({
+                id: 'ct_' + Date.now(),
+                text: text,
+                completed: false
+            });
+            input.value = '';
+            saveCustomTasks();
+            renderCustomTasks();
+        }
+
+        function toggleCustomTask(id) {
+            const task = State.customTasks.find(t => t.id === id);
+            if (task) {
+                task.completed = !task.completed;
+                saveCustomTasks();
+                renderCustomTasks();
+            }
+        }
+
+        function deleteCustomTask(id) {
+            State.customTasks = State.customTasks.filter(t => t.id !== id);
+            saveCustomTasks();
+            renderCustomTasks();
+        }
+
+        function renderCustomTasks() {
+            const container = document.getElementById('custom-tasks-container');
+            container.innerHTML = '';
+
+            if (State.customTasks.length === 0) {
+                container.innerHTML = `<p class="text-sm text-gray-400 text-center py-4 italic">No custom tasks yet.</p>`;
+                return;
+            }
+
+            State.customTasks.forEach(task => {
+                const div = document.createElement('div');
+                div.className = "flex items-center gap-3 p-3 bg-white rounded-xl shadow-sm border border-gray-100 group";
+                div.innerHTML = `
+                    <input type="checkbox" class="circular-checkbox" 
+                           ${task.completed ? 'checked' : ''} 
+                           onchange="toggleCustomTask('${task.id}')">
+                    <span class="flex-1 text-sm font-medium task-text ${task.completed ? 'task-checked' : 'text-gray-700'}">${task.text}</span>
+                    <button onclick="deleteCustomTask('${task.id}')" class="text-gray-300 hover:text-red-500 p-2 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                        <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // --- 2. Matrix Tab Logic (9x9 Grid) ---
+        const DIRECTIONS = [
+            "1. Backend (.NET)", "2. Frontend (React)", "3. Career (10k)", 
+            "8. Character", "CORE GOAL", "4. University",
+            "7. Reading", "6. Dopamine", "5. Physique"
+        ];
+
+        function initMatrixData() {
+            // Generate 81 cells
+            for (let r = 1; r <= 9; r++) {
+                for (let c = 1; c <= 9; c++) {
+                    let type = "Habit/Goal";
+                    let isCenter = (r === 5 && c === 5);
+                    let isHub = (r >= 4 && r <= 6 && c >= 4 && c <= 6 && !isCenter);
+                    let text = "";
+                    let dirName = "";
+
+                    if (isCenter) {
+                        type = "Core";
+                        text = "Land 10k PLN Full-Stack role, hit 65kg, finish Degree.";
+                        dirName = "CORE GOAL";
+                    } else if (isHub) {
+                        type = "Hub";
+                        // Mapping 3x3 center grid to Directions array index
+                        let idx = (r-4)*3 + (c-4); 
+                        dirName = DIRECTIONS[idx];
+                        text = dirName;
+                    } else {
+                        // Determine which 3x3 subgrid this belongs to
+                        let subR = Math.ceil(r/3);
+                        let subC = Math.ceil(c/3);
+                        let idx = (subR-1)*3 + (subC-1);
+                        dirName = DIRECTIONS[idx];
+                        text = `Item R${r}-C${c}`; // Dummy generated content
+                    }
+
+                    State.matrixData.push({
+                        row: r, col: c, type, text, dirName, isCenter, isHub
+                    });
+                }
+            }
+        }
+
+        function renderMatrix() {
+            const grid = document.getElementById('matrix-grid');
+            grid.innerHTML = '';
+
+            State.matrixData.forEach((cell, i) => {
+                const div = document.createElement('div');
+                div.className = 'matrix-cell';
+                
+                // Add thick borders for 3x3 grid separation
+                if (cell.col % 3 === 0 && cell.col !== 9) div.classList.add('border-r-thick');
+                if (cell.row % 3 === 0 && cell.row !== 9) div.classList.add('border-b-thick');
+
+                if (cell.isCenter) {
+                    div.classList.add('matrix-center');
+                    div.innerHTML = `<i class="fa-solid fa-bullseye mt-0.5"></i>`; // Icon for mobile readability
+                } else if (cell.isHub) {
+                    div.classList.add('matrix-hub');
+                    // Extract number if present
+                    let match = cell.text.match(/^(\d)\./);
+                    div.innerHTML = match ? `D${match[1]}` : cell.text.substring(0,3);
+                } else {
+                    div.innerHTML = `<div class="w-1.5 h-1.5 rounded-full bg-gray-300"></div>`; // Minimal dots for items
+                }
+
+                div.onclick = () => openModal(cell);
+                grid.appendChild(div);
+            });
+        }
+
+        // --- Modals ---
+        function openModal(cell) {
+            document.getElementById('modal-title').innerText = cell.dirName;
+            document.getElementById('modal-type').innerText = cell.type.toUpperCase();
+            
+            let desc = cell.text;
+            if(!cell.isCenter && !cell.isHub) {
+                desc = `Coordinate: Row ${cell.row}, Col ${cell.col}. Action item assigned to ${cell.dirName}.`;
+            }
+            document.getElementById('modal-desc').innerText = desc;
+            
+            const modal = document.getElementById('cell-modal');
+            modal.classList.remove('hidden');
+            modal.style.opacity = '1';
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('cell-modal');
+            modal.style.opacity = '0';
+            setTimeout(() => modal.classList.add('hidden'), 200);
+        }
+
+        // --- 3. Stats Tab (Chart.js) ---
+        let radarChartInstance = null;
+        
+        function initChart() {
+            const ctx = document.getElementById('radarChart').getContext('2d');
+            
+            // Random base data for aesthetic, boosted slightly by completed locked tasks
+            let baseData = [75, 60, 90, 85, 50, 70, 80, 65];
+            
+            radarChartInstance = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: ['Backend', 'Frontend', 'Career', 'University', 'Physique', 'Dopamine', 'Reading', 'Character'],
+                    datasets: [{
+                        label: 'Current Balance',
+                        data: baseData,
+                        backgroundColor: 'rgba(14, 149, 232, 0.2)',
+                        borderColor: 'rgba(14, 149, 232, 1)',
+                        pointBackgroundColor: 'rgba(14, 149, 232, 1)',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: 'rgba(14, 149, 232, 1)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        r: {
+                            angleLines: { color: 'rgba(0, 0, 0, 0.05)' },
+                            grid: { color: 'rgba(0, 0, 0, 0.05)' },
+                            pointLabels: {
+                                font: { family: 'Inter', size: 10, weight: '600' },
+                                color: '#4B5563'
+                            },
+                            ticks: { display: false, min: 0, max: 100 }
+                        }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        function updateChartState() {
+            if(!radarChartInstance) return;
+            // Simulated real-time boost based on completed tasks today
+            let data = [75, 60, 90, 85, 50, 70, 80, 65];
+            State.lockedTasks.forEach(task => {
+                if(task.completed) {
+                    // find matching index roughly
+                    let idx = radarChartInstance.data.labels.findIndex(l => task.dir.includes(l));
+                    if(idx !== -1) data[idx] = Math.min(100, data[idx] + 10);
+                }
+            });
+            radarChartInstance.data.datasets[0].data = data;
+            radarChartInstance.update();
+        }
+
+        // --- Navigation Logic ---
+        function switchTab(tabId) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-pane').forEach(el => el.classList.add('hidden'));
+            
+            // Reset nav button styles
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('text-brand-blue');
+                btn.classList.add('text-gray-400');
+                btn.querySelector('span').classList.replace('font-semibold', 'font-medium');
+            });
+            
+            // Show selected tab
+            document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+            
+            // Highlight selected nav
+            const activeBtn = document.getElementById(`nav-${tabId}`);
+            activeBtn.classList.remove('text-gray-400');
+            activeBtn.classList.add('text-brand-blue');
+            activeBtn.querySelector('span').classList.replace('font-medium', 'font-semibold');
+
+            // Handle lazy initializations
+            if (tabId === 'stats' && !radarChartInstance) {
+                initChart();
+                updateChartState();
+            }
+        }
+    </script>
+</body>
+</html>
