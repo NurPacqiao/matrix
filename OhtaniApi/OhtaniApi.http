@@ -1,0 +1,6 @@
+@OhtaniApi_HostAddress = http://localhost:5255
+
+GET {{OhtaniApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
