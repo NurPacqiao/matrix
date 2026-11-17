@@ -30,7 +30,7 @@ namespace OhtaniApi.Controllers
                 // 1. Verify the Google Token
                 var payload = await GoogleJsonWebSignature.ValidateAsync(request.Token, new GoogleJsonWebSignature.ValidationSettings
                 {
-                    Audience = new[] { _configuration["Authentication:Google:ClientId"] }
+                    Audience = new[] { _configuration["Authentication:GoogleClientId"] }
                 });
 
                 // 2. Find or Create User in Neon Database

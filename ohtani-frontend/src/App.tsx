@@ -1,157 +1,145 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { GoogleLogin, type CredentialResponse } from "@react-oauth/google";
 import axios from "axios";
+import { API_BASE, AUTH_EXPIRED_EVENT } from "./api";
 import Matrix from "./components/Matrix";
 import TaskGenerator from "./components/TaskGenerator";
-import Stats from "./components/Stats.tsx";
+import Stats from "./components/Stats";
+import ProfilePanel from "./components/ProfilePanel";
+import NineMark from "./components/NineMark";
+import { emailFromToken } from "./lib/auth";
 
 type Tab = "today" | "matrix" | "stats";
 
+const TABS: { id: Tab; label: string; icon: string }[] = [
+  {
+    id: "today",
+    label: "Today",
+    icon: "M9 12.5l2 2 4-4.5M12 21a9 9 0 100-18 9 9 0 000 18z",
+  },
+  {
+    id: "matrix",
+    label: "Grid",
+    icon: "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z",
+  },
+  {
+    id: "stats",
+    label: "Balance",
+    icon: "M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9L12 3zM12 3v18M4.2 7.5l15.6 9M19.8 7.5l-15.6 9",
+  },
+];
+
 export default function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return !!localStorage.getItem("jwt");
-  });
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem("jwt"));
   const [activeTab, setActiveTab] = useState<Tab>("today");
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onExpired = () => setToken(null);
+    window.addEventListener(AUTH_EXPIRED_EVENT, onExpired);
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, onExpired);
+  }, []);
 
   const handleSuccess = async (credentialResponse: CredentialResponse) => {
+    setLoginError(null);
     try {
-      const res = await axios.post("http://localhost:5255/api/auth/login", {
+      const res = await axios.post(`${API_BASE}/auth/login`, {
         token: credentialResponse.credential,
       });
       localStorage.setItem("jwt", res.data.token);
-      setIsAuthenticated(true);
+      setToken(res.data.token);
     } catch (error) {
       console.error("Login failed to reach backend", error);
+      setLoginError("Couldn't sign you in. Is the API running?");
     }
   };
 
   const handleLogout = () => {
     localStorage.removeItem("jwt");
-    setIsAuthenticated(false);
+    setProfileOpen(false);
+    setToken(null);
   };
 
-  if (!isAuthenticated) {
+  if (!token) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50">
-        <div className="bg-white p-10 rounded-2xl shadow-sm border border-slate-200 flex flex-col items-center max-w-sm w-full mx-4">
-          <h1 className="text-3xl font-bold text-slate-800 tracking-tight mb-8">
-            Ohtani 9x9
-          </h1>
-          <GoogleLogin
-            onSuccess={handleSuccess}
-            onError={() => console.log("Google Login Failed")}
-          />
+      <div className="min-h-[100dvh] flex items-center justify-center px-6 pt-safe pb-safe">
+        <div className="w-full max-w-sm">
+          <NineMark className="w-10 h-10 text-accent mb-8" />
+          <h1 className="text-4xl font-semibold tracking-tight">Nine</h1>
+          <p className="mt-3 text-bone-muted leading-relaxed">
+            One goal. Eight directions. Four steps a day.
+          </p>
+          <div className="mt-10">
+            <GoogleLogin
+              onSuccess={handleSuccess}
+              onError={() => setLoginError("Google sign-in was cancelled or failed.")}
+              theme="filled_black"
+              shape="pill"
+              size="large"
+              text="continue_with"
+            />
+          </div>
+          {loginError && <p className="mt-4 text-sm text-accent-soft">{loginError}</p>}
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
-      {/* Sky Blue Header */}
-      <header className="bg-[#0E95E8] shadow-sm sticky top-0 z-20">
-        <div className="max-w-3xl mx-auto px-4 py-3 flex justify-center items-center relative">
-          <h1 className="text-lg font-bold text-white tracking-wide">
-            Ohtani 9x9
-          </h1>
+  const email = emailFromToken(token);
 
-          {/* Profile / Logout Dropdown Button placed on the right */}
+  return (
+    <div className="min-h-[100dvh] flex flex-col">
+      <header className="sticky top-0 z-20 bg-ink-950/95 backdrop-blur border-b border-ink-800 pt-safe">
+        <div className="max-w-3xl mx-auto px-4 h-14 flex items-center gap-3">
           <button
-            onClick={handleLogout}
-            className="absolute right-4 text-xs font-medium text-white/80 hover:text-white bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-full transition-colors"
+            onClick={() => setProfileOpen(true)}
+            aria-label="Open profile"
+            className="w-9 h-9 rounded-full bg-ink-800 border border-ink-700 text-sm font-semibold text-bone hover:border-accent/60 transition-colors"
           >
-            Sign Out
+            {(email?.[0] ?? "?").toUpperCase()}
           </button>
+          <span className="font-semibold tracking-tight">Nine</span>
+          <span className="ml-auto font-mono text-xs text-bone-faint">
+            {new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
+          </span>
         </div>
       </header>
 
-      {/* Main Content Area - Scrollable */}
-      <main className="flex-grow max-w-3xl mx-auto w-full px-4 py-6 pb-24">
+      <main className="flex-grow max-w-3xl mx-auto w-full px-4 pt-6 pb-28">
         {activeTab === "today" && <TaskGenerator />}
         {activeTab === "matrix" && <Matrix />}
-        {activeTab === "stats" && <Stats />}{" "}
-        {/* Placeholder for your future Radar Chart */}
+        {activeTab === "stats" && <Stats />}
       </main>
 
-      {/* Bottom Navigation Bar */}
-      <nav className="bg-white border-t border-slate-200 fixed bottom-0 w-full z-20 pb-safe">
-        <div className="max-w-3xl mx-auto flex justify-around items-center h-16">
-          <button
-            onClick={() => setActiveTab("today")}
-            className={`flex flex-col items-center justify-center w-full h-full space-y-1 ${activeTab === "today" ? "text-[#0E95E8]" : "text-slate-400 hover:text-slate-600"}`}
-          >
-            {/* Calendar Icon for Today */}
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-              ></path>
-            </svg>
-            <span className="text-[10px] font-semibold uppercase tracking-wider">
-              Today
-            </span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("matrix")}
-            className={`flex flex-col items-center justify-center w-full h-full space-y-1 ${activeTab === "matrix" ? "text-[#0E95E8]" : "text-slate-400 hover:text-slate-600"}`}
-          >
-            {/* Grid Icon for Matrix */}
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
-              ></path>
-            </svg>
-            <span className="text-[10px] font-semibold uppercase tracking-wider">
-              Matrix
-            </span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("stats")}
-            className={`flex flex-col items-center justify-center w-full h-full space-y-1 ${activeTab === "stats" ? "text-[#0E95E8]" : "text-slate-400 hover:text-slate-600"}`}
-          >
-            {/* Pie Chart Icon for Stats */}
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"
-              ></path>
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"
-              ></path>
-            </svg>
-            <span className="text-[10px] font-semibold uppercase tracking-wider">
-              Stats
-            </span>
-          </button>
+      <nav className="fixed bottom-0 inset-x-0 z-20 bg-ink-950/95 backdrop-blur border-t border-ink-800 pb-safe">
+        <div className="max-w-3xl mx-auto flex h-16">
+          {TABS.map((tab) => {
+            const active = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex-1 flex flex-col items-center justify-center gap-1 transition-colors ${
+                  active ? "text-accent-soft" : "text-bone-faint hover:text-bone-muted"
+                }`}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.6" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d={tab.icon} />
+                </svg>
+                <span className="text-[11px] font-medium">{tab.label}</span>
+              </button>
+            );
+          })}
         </div>
       </nav>
+
+      <ProfilePanel
+        open={profileOpen}
+        email={email}
+        onClose={() => setProfileOpen(false)}
+        onSignOut={handleLogout}
+      />
     </div>
   );
 }

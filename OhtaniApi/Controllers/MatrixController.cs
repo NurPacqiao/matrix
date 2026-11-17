@@ -23,8 +23,7 @@ namespace OhtaniApi.Controllers
         public async Task<IActionResult> GetMatrix()
         {
             // 1. Find the user based on their Google Token
-            var googleId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.GoogleId == googleId);
+            var user = await GetCurrentUserAsync();
             
             if (user == null) return Unauthorized();
 
@@ -36,8 +35,7 @@ namespace OhtaniApi.Controllers
         public async Task<IActionResult> SaveMatrix([FromBody] MatrixRequest request)
         {
             // 1. Find the user
-            var googleId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.GoogleId == googleId);
+            var user = await GetCurrentUserAsync();
             
             if (user == null) return Unauthorized();
 
@@ -46,6 +44,14 @@ namespace OhtaniApi.Controllers
             await _context.SaveChangesAsync();
             
             return Ok();
+        }
+
+        // The JWT from AuthController stores our database User.Id (not the Google id) in NameIdentifier
+        private async Task<User?> GetCurrentUserAsync()
+        {
+            var idClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!int.TryParse(idClaim, out var userId)) return null;
+            return await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
         }
     }
 
