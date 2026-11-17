@@ -57,5 +57,5 @@ app.UseAuthorization();  // Check permissions
 app.MapControllers();
 
 // Lets the host (and you) check the API is up without signing in
-app.MapGet("/", () => Results.Ok(new { status = "ok" }));
+app.MapMethods("/", new[] { "GET", "HEAD" }, () => Results.Ok(new { status = "ok" }));
 app.Run();
