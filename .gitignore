@@ -1,0 +1,4 @@
+.DS_Store
+
+# Personal matrix/plan content: seeded into the database, never published
+ohtani-frontend/src/data/private/

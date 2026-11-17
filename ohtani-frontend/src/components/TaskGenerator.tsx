@@ -1,18 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 import api from "../api";
 import { directionById } from "../data/matrix";
-import { classesFor } from "../data/timetable";
+import { classesFor, type Timetable } from "../data/timetable";
 import { formatDayLong, weekdayShort } from "../lib/dates";
 import { loadHistory } from "../lib/history";
 import { buildDailyPlan, isCurrentPlan, PROGRESSIVE_TRACKS, TASKS_PER_DAY } from "../lib/plan";
 import { computeStreak, STREAK_MIN_DONE } from "../lib/streak";
+import { loadConfig } from "../lib/userConfig";
 import type { DayLog, SaveState, Task } from "../types";
 
 export default function TaskGenerator() {
   const [lockedTasks, setLockedTasks] = useState<Task[]>([]);
   const [customTasks, setCustomTasks] = useState<Task[]>([]);
   const [history, setHistory] = useState<DayLog[]>([]);
+  const [timetable, setTimetable] = useState<Timetable>({});
+  const [timetableLabel, setTimetableLabel] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
+  const [slow, setSlow] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [newTask, setNewTask] = useState("");
@@ -41,22 +45,27 @@ export default function TaskGenerator() {
 
   useEffect(() => {
     let cancelled = false;
+    // The free API host sleeps when idle; say so instead of looking broken
+    const slowTimer = window.setTimeout(() => !cancelled && setSlow(true), 4000);
 
     const load = async () => {
       try {
-        const [{ data }, past] = await Promise.all([
+        const [{ data }, past, config] = await Promise.all([
           api.get<{ lockedTasks: Task[]; customTasks: Task[] }>("/tasks"),
           loadHistory(400),
+          loadConfig(),
         ]);
         let locked = data.lockedTasks ?? [];
         const custom = data.customTasks ?? [];
 
         // First open of the day, or a log from before the 5-task plan: build today's plan
         const needsPlan = !isCurrentPlan(locked);
-        if (needsPlan) locked = buildDailyPlan(past);
+        if (needsPlan) locked = buildDailyPlan(past, config.tracks, config.examLabel);
         if (cancelled) return;
 
         setHistory(past);
+        setTimetable(config.timetable);
+        setTimetableLabel(config.timetableLabel);
         setLockedTasks(locked);
         setCustomTasks(custom);
         if (needsPlan) persist(locked, custom);
@@ -64,6 +73,7 @@ export default function TaskGenerator() {
         console.error("Failed to load tasks", error);
         if (!cancelled) setLoadError(true);
       } finally {
+        window.clearTimeout(slowTimer);
         if (!cancelled) setLoading(false);
       }
     };
@@ -71,6 +81,7 @@ export default function TaskGenerator() {
     load();
     return () => {
       cancelled = true;
+      window.clearTimeout(slowTimer);
     };
   }, []);
 
@@ -133,7 +144,11 @@ export default function TaskGenerator() {
         />
       )}
 
-      <ClassesToday />
+      {loading && slow && (
+        <p className="mt-6 text-sm text-bone-muted">Waking up the server… this can take up to a minute after a quiet spell.</p>
+      )}
+
+      <ClassesToday timetable={timetable} label={timetableLabel} />
 
       <section className="mt-8">
         <div className="flex items-baseline justify-between mb-3">
@@ -333,13 +348,13 @@ function StreakCard({
   );
 }
 
-function ClassesToday() {
-  const classes = classesFor();
+function ClassesToday({ timetable, label }: { timetable: Timetable; label?: string }) {
+  const classes = classesFor(timetable);
   if (classes.length === 0) return null;
 
   return (
     <section className="mt-4 rounded-xl border border-ink-800 px-4 py-3">
-      <h2 className="text-[11px] font-medium text-bone-faint">Classes today · group L4</h2>
+      <h2 className="text-[11px] font-medium text-bone-faint">Classes today{label ? ` · ${label}` : ""}</h2>
       <ul className="mt-2 space-y-1.5">
         {classes.map((c) => (
           <li key={c.start + c.subject} className="flex items-baseline gap-3 text-sm">

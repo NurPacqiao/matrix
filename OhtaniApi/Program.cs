@@ -40,7 +40,9 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReact", policy =>
     {
-        policy.WithOrigins("http://localhost:5173")
+        // Add the deployed site in config, e.g. "Cors": { "Origins": ["http://localhost:5173", "https://nurpacqiao.github.io"] }
+        var origins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>() ?? new[] { "http://localhost:5173" };
+        policy.WithOrigins(origins)
               .AllowAnyHeader()
               .AllowAnyMethod();
     });
@@ -53,4 +55,7 @@ app.UseAuthentication(); // Check the ID
 app.UseAuthorization();  // Check permissions
 
 app.MapControllers();
+
+// Lets the host (and you) check the API is up without signing in
+app.MapGet("/", () => Results.Ok(new { status = "ok" }));
 app.Run();

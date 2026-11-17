@@ -2,14 +2,13 @@ import { useEffect, useState } from "react";
 import {
   CELLS,
   CENTER_BLOCK,
-  DEFAULT_CELL_TEXTS,
   DIRECTION_TO_BLOCK,
   directionById,
   itemById,
   type Cell,
 } from "../data/matrix";
 import { completionsByItem, loadHistory } from "../lib/history";
-import { loadMatrix, saveMatrix } from "../lib/matrixStore";
+import { EMPTY_CONFIG, loadConfig, saveConfig, type UserConfig } from "../lib/userConfig";
 import type { SaveState } from "../types";
 
 type View = "focus" | "full";
@@ -17,7 +16,8 @@ type View = "focus" | "full";
 const TYPE_MARK: Record<string, string> = { Habit: "H", "Mini-Goal": "M", Quality: "Q" };
 
 export default function Matrix() {
-  const [cells, setCells] = useState<string[] | null>(null);
+  const [config, setConfig] = useState<UserConfig | null>(null);
+  const cells = config?.cells ?? null;
   const [completions, setCompletions] = useState<Map<number, number>>(new Map());
   const [loadError, setLoadError] = useState(false);
   const [view, setView] = useState<View>("focus");
@@ -26,17 +26,17 @@ export default function Matrix() {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([loadMatrix(), loadHistory(90).catch(() => [])])
-      .then(([matrixCells, history]) => {
+    Promise.all([loadConfig(), loadHistory(90).catch(() => [])])
+      .then(([loaded, history]) => {
         if (cancelled) return;
-        setCells(matrixCells);
+        setConfig(loaded);
         setCompletions(completionsByItem(history));
       })
       .catch((error) => {
         console.error("Failed to load matrix", error);
         if (!cancelled) {
           setLoadError(true);
-          setCells([...DEFAULT_CELL_TEXTS]);
+          setConfig(EMPTY_CONFIG);
         }
       });
     return () => {
@@ -55,10 +55,10 @@ export default function Matrix() {
   };
 
   const saveCell = async (index: number, text: string) => {
-    if (!cells) return;
-    const next = cells.map((t, i) => (i === index ? text : t));
-    await saveMatrix(next);
-    setCells(next);
+    if (!config) return;
+    const next = { ...config, cells: config.cells.map((t, i) => (i === index ? text : t)) };
+    await saveConfig(next);
+    setConfig(next);
   };
 
   const blockDirection = block === CENTER_BLOCK ? undefined : directionById(CELLS.find((c) => c.block === block)?.directionId);
@@ -107,6 +107,7 @@ export default function Matrix() {
         <CellSheet
           cell={selected}
           text={cells[selected.index]}
+          allCells={cells}
           completions={selected.itemId ? completions.get(selected.itemId) ?? 0 : null}
           onClose={() => setSelected(null)}
           onSave={(text) => saveCell(selected.index, text)}
@@ -119,6 +120,12 @@ export default function Matrix() {
       )}
     </div>
   );
+}
+
+// The full direction title is whatever the user wrote in that direction's hub cell
+function directionTitle(directionId: number | undefined, cells: string[]): string | undefined {
+  const hub = CELLS.find((c) => c.kind === "hub" && c.directionId === directionId);
+  return hub ? cells[hub.index] || undefined : undefined;
 }
 
 function cellTone(cell: Cell): string {
@@ -161,9 +168,9 @@ function FocusView({
                   cell.kind === "item" || cell.kind === "core"
                     ? "text-[11px] sm:text-[13px] line-clamp-5"
                     : "text-sm sm:text-base"
-                }`}
+                } ${text ? "" : "text-bone-faint italic"}`}
               >
-                {text}
+                {text || "Tap to write"}
               </span>
             </button>
           );
@@ -203,7 +210,9 @@ function FullView({ cells, onOpen }: { cells: string[]; onOpen: (cell: Cell) => 
                   title={`R${cell.row} C${cell.col}`}
                   className={`aspect-square p-1 text-[9px] leading-[1.2] text-left overflow-hidden hover:brightness-125 ${cellTone(cell)}`}
                 >
-                  <span className={cell.kind === "item" || cell.kind === "core" ? "line-clamp-5" : ""}>{text}</span>
+                  <span className={cell.kind === "item" || cell.kind === "core" ? "line-clamp-5" : ""}>
+                    {text || <span className="text-bone-faint">·</span>}
+                  </span>
                 </button>
               );
             })}
@@ -231,6 +240,7 @@ function Legend() {
 function CellSheet({
   cell,
   text,
+  allCells,
   completions,
   onClose,
   onSave,
@@ -238,6 +248,7 @@ function CellSheet({
 }: {
   cell: Cell;
   text: string;
+  allCells: string[];
   completions: number | null;
   onClose: () => void;
   onSave: (text: string) => Promise<void>;
@@ -283,7 +294,7 @@ function CellSheet({
           {item && <span>· {item.type}</span>}
         </div>
         <h2 className="mt-2 text-lg font-semibold">
-          {cell.kind === "core" ? "Core goal" : direction?.name}
+          {cell.kind === "core" ? "Core goal" : directionTitle(cell.directionId, allCells) ?? direction?.name}
         </h2>
 
         {editable ? (
@@ -294,6 +305,7 @@ function CellSheet({
               setState("idle");
             }}
             rows={4}
+            placeholder="Write this cell…"
             className="mt-4 w-full p-3 rounded-lg bg-ink-950 border border-ink-800 text-bone leading-relaxed resize-none focus:outline-none focus:border-accent/70"
           />
         ) : (
@@ -317,17 +329,6 @@ function CellSheet({
               >
                 {state === "saving" ? "Saving…" : state === "saved" ? "Saved" : "Save"}
               </button>
-              {draft !== DEFAULT_CELL_TEXTS[cell.index] && (
-                <button
-                  onClick={() => {
-                    setDraft(DEFAULT_CELL_TEXTS[cell.index]);
-                    setState("idle");
-                  }}
-                  className="px-4 py-2.5 rounded-lg border border-ink-700 text-sm text-bone-muted hover:bg-ink-800"
-                >
-                  Reset
-                </button>
-              )}
             </>
           ) : (
             <button

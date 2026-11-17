@@ -1,0 +1,8 @@
+bin/
+obj/
+# Never bake local secrets into the image
+appsettings.json
+appsettings.Development.json
+*.http
+Dockerfile
+.dockerignore
