@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { DIRECTIONS } from "../data/matrix";
-import { utcDateKey, weekdayShort } from "../lib/dates";
+import { utcDateKey } from "../lib/dates";
 import { loadHistory } from "../lib/history";
 import { computeStreak } from "../lib/streak";
 import type { DayLog } from "../types";
+import Summary from "./Summary";
 
 // Validated (dataviz validate_palette, dark mode on #16171a): both pass band, chroma, CVD, contrast.
 const THIS_WEEK = "#5b8bd6";
@@ -63,11 +64,6 @@ function computeStats(history: DayLog[]) {
     };
   });
 
-  const days = thisWeekKeys.map((key) => {
-    const locked = byDate.get(key)?.lockedTasks ?? [];
-    return { key, done: locked.filter((t) => t.isCompleted).length, total: locked.length };
-  });
-
   const { streak, best } = computeStreak(history);
 
   const doneThisWeek = scores.reduce((s, d) => s + d.doneThis, 0);
@@ -81,7 +77,7 @@ function computeStats(history: DayLog[]) {
     .sort((a, b) => a.thisWeek - b.thisWeek || a.id - b.id)
     .slice(0, 2);
 
-  return { scores, days, streak, best, doneThisWeek, plannedThisWeek, rateThis, rateLast, plannedLastWeek, weakest };
+  return { byDate, scores, streak, best, doneThisWeek, plannedThisWeek, rateThis, rateLast, plannedLastWeek, weakest };
 }
 
 export default function Stats() {
@@ -90,7 +86,7 @@ export default function Stats() {
 
   useEffect(() => {
     let cancelled = false;
-    loadHistory(90)
+    loadHistory(400) // a year for the summary
       .then((h) => !cancelled && setHistory(h))
       .catch((e) => {
         console.error("Failed to load history", e);
@@ -123,7 +119,7 @@ export default function Stats() {
               value={stats.streak}
               unit={stats.best > stats.streak ? `best ${stats.best}` : stats.streak === 1 ? "day" : "days"}
             />
-            <Tile label="Done this week" value={stats.doneThisWeek} unit={`/ ${stats.plannedThisWeek || 28}`} />
+            <Tile label="Done this week" value={stats.doneThisWeek} unit={stats.plannedThisWeek ? `/ ${stats.plannedThisWeek}` : undefined} />
             <Tile
               label="vs last week"
               value={
@@ -161,10 +157,7 @@ export default function Stats() {
             )}
           </section>
 
-          <section className="mt-4 rounded-xl bg-ink-900 border border-ink-800 p-4 sm:p-6">
-            <h2 className="text-sm font-medium text-bone">Daily plan, last 7 days</h2>
-            <DayBars days={stats.days} />
-          </section>
+          <Summary byDate={stats.byDate} />
 
           {stats.weakest.length === 2 && (
             <section className="mt-4 rounded-xl border border-ink-800 p-4 sm:p-6">
@@ -241,8 +234,32 @@ function Radar({ scores }: { scores: DirectionScore[] }) {
   const max = 1; // rates, 0-100%
   const rings = [0.25, 0.5, 0.75, 1];
 
-  const polygon = (key: "thisWeek" | "lastWeek") =>
-    scores.map((s) => point(s.id, (s[key] / max) * R).join(",")).join(" ");
+  // Directions with nothing planned in either week are paused. Their wedge is hatched out
+  // and the shape detours through the center, so it never covers a paused wedge and a
+  // paused direction doesn't read as 0%. (With fewer than 3 in play, nothing is paused.)
+  const inPlay = scores.filter((s) => s.plannedThis + s.plannedLast > 0);
+  const isPaused = (s: DirectionScore) => inPlay.length >= 3 && !inPlay.includes(s);
+  const center = `${CX},${CY}`;
+
+  const polygon = (key: "thisWeek" | "lastWeek") => {
+    const points: string[] = [];
+    for (const s of scores) {
+      const p = isPaused(s) ? center : point(s.id, (s[key] / max) * R).join(",");
+      if (p !== center || points[points.length - 1] !== center) points.push(p);
+    }
+    if (points.length > 1 && points[0] === center && points[points.length - 1] === center) points.pop();
+    return points.join(" ");
+  };
+
+  // The slice of the web a direction owns: out to its outer corner, halfway along the edges to each neighbour
+  const wedge = (directionId: number, radius: number) => {
+    const [x, y] = point(directionId, radius);
+    const half = (neighbour: number) => {
+      const [nx, ny] = point(neighbour, radius);
+      return `${(x + nx) / 2},${(y + ny) / 2}`;
+    };
+    return `M${CX},${CY} L${half(((directionId + 6) % 8) + 1)} L${x},${y} L${half((directionId % 8) + 1)} Z`;
+  };
 
   const activeScore = scores.find((s) => s.id === active);
 
@@ -272,9 +289,19 @@ function Radar({ scores }: { scores: DirectionScore[] }) {
             />
           );
         })}
-        <text x={CX + 4} y={CY - R - 3} fontSize="9" fill="#75767a" fontFamily="IBM Plex Mono, monospace">
-          100%
-        </text>
+
+        <defs>
+          <pattern id="radar-paused" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <line x1="0" y1="0" x2="0" y2="6" stroke="#2c2f35" strokeWidth="1.5" />
+          </pattern>
+        </defs>
+        {scores.filter(isPaused).map((s) => (
+          <g key={s.id}>
+            <path d={wedge(s.id, R + 2)} fill="#16171a" />
+            <path d={wedge(s.id, R)} fill="url(#radar-paused)" />
+          </g>
+        ))}
+
 
         <polygon
           points={polygon("lastWeek")}
@@ -293,7 +320,7 @@ function Radar({ scores }: { scores: DirectionScore[] }) {
           strokeWidth="2"
           strokeLinejoin="round"
         />
-        {scores.map((s) => {
+        {scores.filter((s) => !isPaused(s)).map((s) => {
           const [x, y] = point(s.id, (s.thisWeek / max) * R);
           return (
             <circle
@@ -319,10 +346,11 @@ function Radar({ scores }: { scores: DirectionScore[] }) {
               y={y + dy}
               textAnchor={anchor}
               fontSize="12"
-              fill={active === s.id ? "#e9e5dc" : s.plannedThis + s.plannedLast > 0 ? "#a3a29d" : "#75767a"}
+              fill={active === s.id ? "#e9e5dc" : isPaused(s) ? "#75767a" : "#a3a29d"}
               fontFamily="Instrument Sans, system-ui, sans-serif"
             >
               {s.short}
+              {isPaused(s) && <tspan fontSize="10"> · paused</tspan>}
             </text>
           );
         })}
@@ -354,59 +382,18 @@ function Radar({ scores }: { scores: DirectionScore[] }) {
             <span className="w-2 h-2 rounded-full" style={{ background: THIS_WEEK }} />
             This week{" "}
             <span className="ml-auto pl-3 font-mono text-bone">
-              {activeScore.plannedThis ? `${activeScore.doneThis}/${activeScore.plannedThis} · ${pct(activeScore.thisWeek)}` : "not planned"}
+              {activeScore.plannedThis ? `${activeScore.doneThis}/${activeScore.plannedThis} · ${pct(activeScore.thisWeek)}` : "nothing planned"}
             </span>
           </p>
           <p className="flex items-center gap-2 text-bone-muted">
             <span className="w-2 h-2 rounded-full" style={{ background: LAST_WEEK }} />
             Last week{" "}
             <span className="ml-auto pl-3 font-mono text-bone">
-              {activeScore.plannedLast ? `${activeScore.doneLast}/${activeScore.plannedLast} · ${pct(activeScore.lastWeek)}` : "not planned"}
+              {activeScore.plannedLast ? `${activeScore.doneLast}/${activeScore.plannedLast} · ${pct(activeScore.lastWeek)}` : "nothing planned"}
             </span>
           </p>
         </div>
       )}
-    </div>
-  );
-}
-
-// ---------- 7-day bars ----------
-
-function DayBars({ days }: { days: { key: string; done: number; total: number }[] }) {
-  const [active, setActive] = useState<string | null>(null);
-  const todayKey = utcDateKey(0);
-
-  return (
-    <div className="mt-4 grid grid-cols-7 gap-2">
-      {days.map((day) => {
-        const isToday = day.key === todayKey;
-        return (
-          <div
-            key={day.key}
-            className="flex flex-col items-center"
-            onMouseEnter={() => setActive(day.key)}
-            onMouseLeave={() => setActive(null)}
-            onClick={() => setActive(active === day.key ? null : day.key)}
-          >
-            <span className={`h-4 font-mono text-[10px] ${active === day.key ? "text-bone" : "text-transparent"}`}>
-              {day.done}/{day.total || 4}
-            </span>
-            <div className="mt-1 w-full max-w-[28px] h-20 flex flex-col justify-end">
-              {day.done > 0 ? (
-                <div
-                  className="w-full rounded-t"
-                  style={{ height: `${(day.done / (day.total || 4)) * 100}%`, background: THIS_WEEK, opacity: active && active !== day.key ? 0.5 : 1 }}
-                />
-              ) : (
-                <div className="w-full h-px bg-ink-600" />
-              )}
-            </div>
-            <span className={`mt-2 text-[11px] ${isToday ? "text-bone" : "text-bone-faint"}`}>
-              {isToday ? "Today" : weekdayShort(day.key)}
-            </span>
-          </div>
-        );
-      })}
     </div>
   );
 }

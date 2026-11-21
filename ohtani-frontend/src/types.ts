@@ -7,6 +7,11 @@ export interface Task {
   // Present on daily plan tasks: the progression track and which step of it this is
   trackId?: string | null;
   step?: number | null;
+  // Present on daily plan tasks: Pomodoros the task is worth once done, and for counted
+  // tasks (pages, applications) the day's target and what was actually logged
+  pomos?: number | null;
+  target?: number | null;
+  amount?: number | null;
 }
 
 export interface DayLog {

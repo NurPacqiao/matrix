@@ -4,8 +4,8 @@ import { directionById } from "../data/matrix";
 import { classesFor, type Timetable } from "../data/timetable";
 import { formatDayLong, weekdayShort } from "../lib/dates";
 import { loadHistory } from "../lib/history";
-import { buildDailyPlan, isCurrentPlan, PROGRESSIVE_TRACKS, TASKS_PER_DAY } from "../lib/plan";
-import { computeStreak, STREAK_MIN_DONE } from "../lib/streak";
+import { buildDailyPlan, carryOver, countedTrack, isCurrentPlan, MAX_TASKS_PER_DAY, PROGRESSIVE_TRACKS } from "../lib/plan";
+import { computeStreak, streakMinDone } from "../lib/streak";
 import { loadConfig } from "../lib/userConfig";
 import type { DayLog, SaveState, Task } from "../types";
 
@@ -58,9 +58,9 @@ export default function TaskGenerator() {
         let locked = data.lockedTasks ?? [];
         const custom = data.customTasks ?? [];
 
-        // First open of the day, or a log from before the 5-task plan: build today's plan
+        // First open of the day, or a log from an older plan: build today's plan, keeping any ticks
         const needsPlan = !isCurrentPlan(locked);
-        if (needsPlan) locked = buildDailyPlan(past, config.tracks, config.examLabel);
+        if (needsPlan) locked = carryOver(buildDailyPlan(past, config.tracks, config.examLabel), locked);
         if (cancelled) return;
 
         setHistory(past);
@@ -85,8 +85,25 @@ export default function TaskGenerator() {
     };
   }, []);
 
+  // Counted tasks (pages, applications) log the target when ticked, and clear it when unticked
   const toggle = (tasks: Task[], index: number) =>
-    tasks.map((task, i) => (i === index ? { ...task, isCompleted: !task.isCompleted } : task));
+    tasks.map((task, i) => {
+      if (i !== index) return task;
+      const isCompleted = !task.isCompleted;
+      if (!task.target) return { ...task, isCompleted };
+      return { ...task, isCompleted, amount: isCompleted ? Math.max(task.amount ?? 0, task.target) : 0 };
+    });
+
+  // A counted task is done once the logged amount reaches its target
+  const changeAmount = (index: number, by: number) =>
+    update(
+      lockedTasks.map((task, i) => {
+        if (i !== index || !task.target) return task;
+        const amount = Math.max((task.amount ?? 0) + by, 0);
+        return { ...task, amount, isCompleted: amount >= task.target };
+      }),
+      customTasks,
+    );
 
   const addCustomTask = (e: React.FormEvent) => {
     e.preventDefault();
@@ -140,6 +157,7 @@ export default function TaskGenerator() {
           best={streak.best}
           todayDone={streak.todayDone}
           doneToday={doneCount}
+          planSize={lockedTasks.length}
           last7={streak.last7}
         />
       )}
@@ -162,7 +180,7 @@ export default function TaskGenerator() {
 
         {loading ? (
           <div className="space-y-2">
-            {Array.from({ length: TASKS_PER_DAY }, (_, i) => (
+            {Array.from({ length: MAX_TASKS_PER_DAY }, (_, i) => (
               <div key={i} className="h-[60px] rounded-xl bg-ink-900 border border-ink-800 animate-pulse" />
             ))}
           </div>
@@ -171,8 +189,9 @@ export default function TaskGenerator() {
             {lockedTasks.map((task, i) => {
               const direction = directionById(task.directionId);
               const isUni = task.directionId === 4;
+              const counted = task.target ? countedTrack(task.trackId) : undefined;
               return (
-                <li key={i}>
+                <li key={i} className="relative">
                   <button
                     onClick={() => update(toggle(lockedTasks, i), customTasks)}
                     className={`w-full text-left flex gap-3 px-4 py-3 rounded-xl border transition-colors ${
@@ -182,7 +201,7 @@ export default function TaskGenerator() {
                     }`}
                   >
                     <Check checked={task.isCompleted} />
-                    <span className="min-w-0 flex-grow">
+                    <span className={`min-w-0 flex-grow ${counted ? "pr-[112px]" : ""}`}>
                       <span
                         className={`block leading-snug ${
                           task.isCompleted ? "text-bone-faint line-through" : "text-bone"
@@ -196,10 +215,22 @@ export default function TaskGenerator() {
                           {task.trackId && PROGRESSIVE_TRACKS.has(task.trackId) && task.step && task.step > 1 && (
                             <span>· level {task.step}</span>
                           )}
+                          {counted && (
+                            <span>
+                              · {task.amount ?? 0}/{task.target} {counted.unit}
+                            </span>
+                          )}
                         </span>
                       )}
                     </span>
                   </button>
+                  {counted && (
+                    <Stepper
+                      value={task.amount ?? 0}
+                      unit={counted.unit}
+                      onChange={(sign) => changeAmount(i, sign * counted.stepBy)}
+                    />
+                  )}
                 </li>
               );
             })}
@@ -207,7 +238,7 @@ export default function TaskGenerator() {
         )}
         {!loading && (
           <p className="mt-3 text-[11px] text-bone-faint leading-relaxed">
-            University first, every day. Workouts and exam topics only move up once you finish them.
+            University first, every day. Use − / + to log Pomodoros, pages and applications; going past the goal counts too.
           </p>
         )}
       </section>
@@ -300,20 +331,23 @@ function StreakCard({
   best,
   todayDone,
   doneToday,
+  planSize,
   last7,
 }: {
   streak: number;
   best: number;
   todayDone: boolean;
   doneToday: number;
+  planSize: number;
   last7: { key: string; counts: boolean }[];
 }) {
-  const left = Math.max(STREAK_MIN_DONE - doneToday, 0);
+  const minDone = streakMinDone(planSize);
+  const left = Math.max(minDone - doneToday, 0);
   const hint = todayDone
     ? "Today counts. Keep going."
     : streak > 0
       ? `${left} more today to make it ${streak + 1}.`
-      : `Finish ${STREAK_MIN_DONE} of ${TASKS_PER_DAY} today to start a streak.`;
+      : `Finish ${minDone} of ${planSize} today to start a streak.`;
 
   return (
     <div className="mt-6 rounded-xl bg-ink-900 border border-ink-800 p-4 flex items-center gap-4">
@@ -370,6 +404,34 @@ function ClassesToday({ timetable, label }: { timetable: Timetable; label?: stri
         ))}
       </ul>
     </section>
+  );
+}
+
+// − / + for counted tasks, sitting on the right edge of the task row
+function Stepper({ value, unit, onChange }: { value: number; unit: string; onChange: (sign: 1 | -1) => void }) {
+  return (
+    <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center rounded-lg border border-ink-700 bg-ink-950">
+      <button
+        onClick={() => onChange(-1)}
+        disabled={value === 0}
+        aria-label={`Fewer ${unit}`}
+        className="w-9 h-9 flex items-center justify-center text-bone-muted disabled:text-ink-600"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <path strokeLinecap="round" d="M6 12h12" />
+        </svg>
+      </button>
+      <span className="w-8 text-center font-mono text-sm tabular-nums text-bone">{value}</span>
+      <button
+        onClick={() => onChange(1)}
+        aria-label={`More ${unit}`}
+        className="w-9 h-9 flex items-center justify-center text-bone-muted"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <path strokeLinecap="round" d="M12 6v12M6 12h12" />
+        </svg>
+      </button>
+    </div>
   );
 }
 

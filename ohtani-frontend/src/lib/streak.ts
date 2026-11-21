@@ -1,15 +1,15 @@
 import type { DayLog, Task } from "../types";
 import { utcDateKey } from "./dates";
 
-// A day counts toward the streak when at least 3 of its 4 plan tasks are done
-// (older 3-task days need all 3). Strict enough to matter, loose enough not to
-// snap after one bad slot.
-export const STREAK_MIN_DONE = 3;
+// A day counts toward the streak when about three quarters of its plan is done:
+// 7 of 9, 6 of 8, and 3 of 4 (or all 3) on older days. Strict enough to matter,
+// loose enough not to snap after one bad slot.
+export const streakMinDone = (planSize: number) => Math.ceil(planSize * 0.75);
 
 export function dayCounts(tasks: Task[] | undefined): boolean {
   if (!tasks || tasks.length === 0) return false;
   const done = tasks.filter((t) => t.isCompleted).length;
-  return done >= Math.min(STREAK_MIN_DONE, tasks.length);
+  return done >= streakMinDone(tasks.length);
 }
 
 /**

@@ -1,7 +1,7 @@
 {
-  "name": "Nine",
-  "short_name": "Nine",
-  "description": "One goal, eight directions, four steps a day.",
+  "name": "Matrix",
+  "short_name": "Matrix",
+  "description": "One goal, eight directions, a few clear steps every day.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

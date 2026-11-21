@@ -6,7 +6,7 @@ import Matrix from "./components/Matrix";
 import TaskGenerator from "./components/TaskGenerator";
 import Stats from "./components/Stats";
 import ProfilePanel from "./components/ProfilePanel";
-import NineMark from "./components/NineMark";
+import AppMark from "./components/AppMark";
 import { emailFromToken } from "./lib/auth";
 
 type Tab = "today" | "matrix" | "stats";
@@ -65,10 +65,10 @@ export default function App() {
     return (
       <div className="min-h-[100dvh] flex items-center justify-center px-6 pt-safe pb-safe">
         <div className="w-full max-w-sm">
-          <NineMark className="w-10 h-10 text-accent mb-8" />
-          <h1 className="text-4xl font-semibold tracking-tight">Nine</h1>
+          <AppMark className="w-12 h-12 mb-8" />
+          <h1 className="text-4xl font-semibold tracking-tight">Matrix</h1>
           <p className="mt-3 text-bone-muted leading-relaxed">
-            One goal. Eight directions. Four steps a day.
+            One goal. Eight directions. A few clear steps every day.
           </p>
           <div className="mt-10">
             <GoogleLogin
@@ -90,8 +90,8 @@ export default function App() {
 
   return (
     <div className="min-h-[100dvh] flex flex-col">
-      <header className="sticky top-0 z-20 bg-ink-950/95 backdrop-blur border-b border-ink-800 pt-safe">
-        <div className="max-w-3xl mx-auto px-4 h-14 flex items-center gap-3">
+      <header className="sticky top-0 z-20 bg-ink-950 border-b border-ink-800 pt-safe">
+        <div className="max-w-3xl mx-auto px-4 pt-2 h-[60px] flex items-center gap-3">
           <button
             onClick={() => setProfileOpen(true)}
             aria-label="Open profile"
@@ -99,8 +99,7 @@ export default function App() {
           >
             {(email?.[0] ?? "?").toUpperCase()}
           </button>
-          <span className="font-semibold tracking-tight">Nine</span>
-          <span className="ml-auto font-mono text-xs text-bone-faint">
+          <span className="ml-auto text-sm font-medium tabular-nums text-bone-muted">
             {new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
           </span>
         </div>
@@ -112,7 +111,7 @@ export default function App() {
         {activeTab === "stats" && <Stats />}
       </main>
 
-      <nav className="fixed bottom-0 inset-x-0 z-20 bg-ink-950/95 backdrop-blur border-t border-ink-800 pb-safe">
+      <nav className="fixed bottom-0 inset-x-0 z-20 bg-ink-950 border-t border-ink-800 pb-safe">
         <div className="max-w-3xl mx-auto flex h-16">
           {TABS.map((tab) => {
             const active = activeTab === tab.id;

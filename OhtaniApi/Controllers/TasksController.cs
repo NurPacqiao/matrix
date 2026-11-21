@@ -153,6 +153,11 @@ namespace OhtaniApi.Controllers
         // Set on the daily plan: which progression track (e.g. "thesis") and which step of it
         public string? TrackId { get; set; }
         public int? Step { get; set; }
+        // Set on the daily plan: Pomodoros the task is worth, and for counted tasks (pages,
+        // applications) the day's target and the amount actually logged
+        public int? Pomos { get; set; }
+        public int? Target { get; set; }
+        public int? Amount { get; set; }
     }
 
     // Small helper boxes for the JSON going to and from React

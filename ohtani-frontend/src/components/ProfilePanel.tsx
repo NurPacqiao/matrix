@@ -1,7 +1,7 @@
 import { useEffect } from "react";
-import NineMark from "./NineMark";
+import AppMark from "./AppMark";
 
-const APP_VERSION = "0.7.0";
+const APP_VERSION = "0.8.0";
 
 interface ProfilePanelProps {
   open: boolean;
@@ -31,8 +31,11 @@ export default function ProfilePanel({ open, email, onClose, onSignOut }: Profil
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="p-5 pt-[max(1.25rem,env(safe-area-inset-top))] flex items-center justify-between">
-          <NineMark className="w-6 h-6 text-accent" />
+        <div className="p-5 pt-[calc(env(safe-area-inset-top)+1.25rem)] flex items-center justify-between">
+          <span className="flex items-center gap-2.5">
+            <AppMark className="w-6 h-6" />
+            <span className="text-lg font-semibold tracking-tight text-bone">Matrix</span>
+          </span>
           <button onClick={onClose} aria-label="Close" className="text-bone-faint hover:text-bone p-1">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
               <path strokeLinecap="round" d="M6 6l12 12M18 6L6 18" />
@@ -50,8 +53,10 @@ export default function ProfilePanel({ open, email, onClose, onSignOut }: Profil
 
         <div className="px-5 py-5 space-y-4 text-sm">
           <p className="text-bone-muted leading-relaxed">
-            Each day Nine builds a 4-task plan on a fixed weekly schedule: 3 Pomodoros on the thesis,
-            2 on the subject with the next lab, a home workout, and your daily standard.
+            Each day Matrix builds an 8-9 task plan on a fixed weekly schedule. University comes first
+            until mid-February: the thesis and exam questions every day, plus the course with the next
+            lab. Then typing, job applications, reading, your daily standards, and a light workout
+            or a stretch.
           </p>
           <p className="text-bone-faint text-xs leading-relaxed">
             Days follow UTC, so a new day starts at 01:00 in Poland (02:00 in summer).
@@ -65,7 +70,7 @@ export default function ProfilePanel({ open, email, onClose, onSignOut }: Profil
           >
             Sign out
           </button>
-          <p className="mt-4 text-center font-mono text-[11px] text-bone-faint">Nine v{APP_VERSION}</p>
+          <p className="mt-4 text-center font-mono text-[11px] text-bone-faint">Matrix v{APP_VERSION}</p>
         </div>
       </aside>
     </div>
