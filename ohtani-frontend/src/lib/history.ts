@@ -1,12 +1,17 @@
-import api from "../api";
 import type { DayLog } from "../types";
+import { api } from "./api";
 
-export async function loadHistory(days = 14): Promise<DayLog[]> {
-  const response = await api.get<DayLog[]>("/tasks/history", { params: { days } });
-  return response.data;
-}
+export const HISTORY_DAYS = 400; // a year for the summary, plus room for the streak
 
-// How many times each matrix item has been completed as one of the daily three
+export const loadHistory = (days = 14) => api.get<DayLog[]>("/tasks/history", { days });
+
+/** The history with one day replaced by its live (possibly unsaved) state. */
+export const withDay = (history: DayLog[], day: DayLog): DayLog[] => [
+  ...history.filter((d) => d.date !== day.date),
+  day,
+];
+
+// How many times each matrix item has been completed as a daily plan task
 export function completionsByItem(history: DayLog[]): Map<number, number> {
   const counts = new Map<number, number>();
   for (const day of history) {

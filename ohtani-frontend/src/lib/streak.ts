@@ -1,5 +1,6 @@
 import type { DayLog, Task } from "../types";
-import { utcDateKey } from "./dates";
+import { dateKeyDaysAgo } from "./dates";
+import { HISTORY_DAYS } from "./history";
 
 // A day counts toward the streak when about three quarters of its plan is done:
 // 7 of 9, 6 of 8, and 3 of 4 (or all 3) on older days. Strict enough to matter,
@@ -12,31 +13,34 @@ export function dayCounts(tasks: Task[] | undefined): boolean {
   return done >= streakMinDone(tasks.length);
 }
 
+export interface Streak {
+  streak: number;
+  best: number;
+  todayDone: boolean;
+  last7: { key: string; counts: boolean }[]; // oldest first
+}
+
 /**
  * Current streak. Today only adds to it once it counts; until then the streak
  * from yesterday backwards is shown as still alive.
- * Pass todayTasks to use live (unsaved) state for today.
  */
-export function computeStreak(history: DayLog[], todayTasks?: Task[]) {
+export function computeStreak(history: DayLog[], today = new Date()): Streak {
   const byDate = new Map(history.map((d) => [d.date, d.lockedTasks]));
-  const todayKey = utcDateKey(0);
-  if (todayTasks) byDate.set(todayKey, todayTasks);
+  // Index = days ago
+  const counts = Array.from({ length: HISTORY_DAYS }, (_, i) => dayCounts(byDate.get(dateKeyDaysAgo(i, today))));
 
-  let past = 0;
-  for (let i = 1; i < 400 && dayCounts(byDate.get(utcDateKey(i))); i++) past++;
+  const todayDone = counts[0];
+  let streak = todayDone ? 1 : 0;
+  for (let i = 1; i < counts.length && counts[i]; i++) streak++;
 
-  const todayDone = dayCounts(byDate.get(todayKey));
   let best = 0;
   let run = 0;
-  for (let i = 399; i >= 0; i--) {
-    run = dayCounts(byDate.get(utcDateKey(i))) ? run + 1 : 0;
+  for (const counted of counts) {
+    run = counted ? run + 1 : 0;
     best = Math.max(best, run);
   }
 
-  const last7 = Array.from({ length: 7 }, (_, i) => {
-    const key = utcDateKey(6 - i);
-    return { key, counts: dayCounts(byDate.get(key)) };
-  });
+  const last7 = Array.from({ length: 7 }, (_, i) => ({ key: dateKeyDaysAgo(6 - i, today), counts: counts[6 - i] }));
 
-  return { streak: past + (todayDone ? 1 : 0), todayDone, best, last7 };
+  return { streak, best, todayDone, last7 };
 }

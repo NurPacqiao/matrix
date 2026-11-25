@@ -1,19 +1,23 @@
 import type { DayLog, Task } from "../types";
+import { dateKey } from "./dates";
 
 /**
  * The daily plan: 8-9 short, precise tasks on a fixed weekly schedule (no randomness).
  *
- * Until the degree is done (PRIORITY_UNTIL), university comes first:
- *   University: thesis (3+ Pomodoros, counted) + final exam practice (2 Pomodoros) every day,
- *               plus a course on the evenings before a lab (Sun-Thu)
- *   Career:     Monkeytype (1 Pomodoro) + job applications
+ * University comes first, then the plan changes in phases (see PHASES):
+ *   exams:  thesis (3+ Pomodoros, counted) + final exam practice (3 Pomodoros) every day,
+ *           plus a course on the evenings before a lab (Sun-Thu)
+ *   light:  the week after the exams, about half the tasks
+ *   buffer: university paperwork or a resit
+ *   build:  backend and frontend work
+ *
+ * On top of that, every day:
+ *   Career:     Monkeytype (1 Pomodoro) + the CV, then job applications
  *   Focus:      reading
  *   Discipline: the daily clean-day standard
- *   Character:  daily dhikr
- *   Physique:   4 light workouts a week, a stretching session on the days in between
- *
- * After PRIORITY_UNTIL the thesis and exam slots become backend and frontend work,
- * and the course slot drops out.
+ *   Character:  prayers (counted) + dhikr, one task
+ *   Physique:   4 workouts a week, a stretching session on the days in between. Light at
+ *               first, then a stretch-only break, then longer kettlebell sessions (see BODY_*).
  *
  * Tracks with progression (workouts, stretching) only advance after you
  * complete a step, so a skipped step comes back next time instead of being lost.
@@ -32,10 +36,30 @@ interface Track {
   stepBy?: number; // counted tasks: how much one tap on + or − changes
 }
 
-export const PRIORITY_UNTIL = "2027-02-15"; // local date; the degree-first plan runs through this day
+// The last local day of each phase; after the last one comes "build"
+export const PHASES = {
+  exams: "2027-02-03",
+  light: "2027-02-10",
+  buffer: "2027-02-19",
+} as const;
+export const PRIORITY_DIRECTION = 4; // University
+
+export const CV_UNTIL = "2026-11-29"; // applications wait until the CV is rewritten
+export const BODY_LIGHT_UNTIL = "2027-02-07";
+export const BODY_STRETCH_UNTIL = "2027-03-10"; // stretching only, then the kettlebell sessions start
 
 // Workouts stay light: a level is added every 3 completed sessions, up to level 4
 const level = (n: number) => Math.min(Math.floor(n / 3), 4);
+// Kettlebell sessions: a level every 6 completed sessions, up to level 8
+const kbLevel = (n: number) => Math.min(Math.floor(n / 6), 8);
+
+// One step per completed day; the last one repeats until the CV phase ends
+const CV_STEPS = [
+  "CV 1/4: work experience bullets (problem → action → result)",
+  "CV 2/4: projects, each with a live link and one result",
+  "CV 3/4: summary + skills matched to .NET + React roles",
+  "CV 4/4: LinkedIn matches the CV, final PDF exported",
+];
 
 const STRETCHES = [
   "Stretch 15 min, hips + legs: hip-flexor lunge, pigeon, hamstring fold, deep squat hold (45 s each, each side)",
@@ -54,7 +78,7 @@ const TRACKS: Record<string, Track> = {
     step: () => "Thesis project",
   },
   // Practising the exam's test questions; the id stays "questions" because past days reference it
-  questions: { directionId: 4, matrixId: 29, pomos: 2, step: () => "Final exam: 2 Pomodoros" },
+  questions: { directionId: 4, matrixId: 29, pomos: 3, step: () => "Final exam: 3 Pomodoros" },
   // Track ids are kept short and stable because past days reference them
   wp: { directionId: 4, matrixId: 28, pomos: 2, step: () => "Course: 2 Pomodoros (Mon lab)" },
   pzsi: { directionId: 4, matrixId: 28, pomos: 2, step: () => "Course: 2 Pomodoros (Tue lab)" },
@@ -62,12 +86,15 @@ const TRACKS: Record<string, Track> = {
   krypto: { directionId: 4, matrixId: 28, pomos: 2, step: () => "Course: 2 Pomodoros (Thu lab)" },
   to: { directionId: 4, matrixId: 28, pomos: 2, step: () => "Course: 2 Pomodoros on lab tasks" },
 
+  paperwork: { directionId: 4, matrixId: 31, pomos: 2, step: () => "University: 2 Pomodoros (paperwork or resit)" },
+
   // ---- After the degree ----
   backend: { directionId: 1, matrixId: 1, pomos: 2, step: () => "Backend: 2 Pomodoros of C# / ASP.NET Core" },
   frontend: { directionId: 2, matrixId: 9, pomos: 2, step: () => "Frontend: 2 Pomodoros of React + TypeScript" },
 
   // ---- Career ----
   typing: { directionId: 3, matrixId: 18, pomos: 1, step: () => "Monkeytype: 1 Pomodoro" },
+  cv: { directionId: 3, matrixId: 20, step: (n) => CV_STEPS[Math.min(n, CV_STEPS.length - 1)] },
   jobs: {
     directionId: 3,
     matrixId: 17,
@@ -80,7 +107,8 @@ const TRACKS: Record<string, Track> = {
   // ---- Focus, discipline, character ----
   reading: { directionId: 7, matrixId: 49, target: 10, unit: "pages", stepBy: 5, step: () => "Read 10 pages" },
   clean: { directionId: 6, matrixId: 41, step: () => "Clean day: no short-form video" },
-  dhikr: { directionId: 8, matrixId: 57, step: () => "Dhikr: 300 + 300" },
+  // Replaced the plain "dhikr" tick. A new id, because an old dhikr tick says nothing about prayers.
+  prayers: { directionId: 8, matrixId: 57, target: 5, unit: "prayers", stepBy: 1, step: () => "5 prayers + dhikr" },
 
   // ---- Body: light home calisthenics, no bar, ~20 min with a short cool-down ----
   push: {
@@ -100,39 +128,55 @@ const TRACKS: Record<string, Track> = {
     },
   },
   stretch: { directionId: 5, matrixId: 36, step: (n) => STRETCHES[n % STRETCHES.length] },
+
+  // ---- Body, later: ~45 min with a 16 kg kettlebell and bodyweight, no bar ----
+  kbPush: {
+    directionId: 5,
+    matrixId: 33,
+    step: (n) => {
+      const l = kbLevel(n);
+      return `Push 45 min: 4×${6 + l} pike push-ups, 4×${12 + l} slow push-ups, 3×${8 + l} kettlebell floor press/side, 3×${8 + l} chair dips, then 5 min stretch`;
+    },
+  },
+  kbPullLegs: {
+    directionId: 5,
+    matrixId: 33,
+    step: (n) => {
+      const l = kbLevel(n);
+      return `Pull + legs 45 min: 4×${8 + l} kettlebell rows/side, 4×${10 + l} goblet squats, 3×${8 + l} split squats/leg, 4×${15 + l} swings, then 5 min stretch`;
+    },
+  },
 };
 
-// Index = Date.getDay() (0 = Sunday). The course slot preps the next day's lab.
-// Workouts Mon/Wed/Fri/Sat, stretching on the days after a workout.
-const UNI_WEEK: string[][] = [
-  ["thesis", "questions", "wp", "stretch"], // Sun → Mon lab
-  ["thesis", "questions", "pzsi", "push"], // Mon → Tue lab
-  ["thesis", "questions", "iiad", "stretch"], // Tue → Wed lab
-  ["thesis", "questions", "krypto", "pullLegs"], // Wed → Thu lab
-  ["thesis", "questions", "to", "stretch"], // Thu: evening lab
-  ["thesis", "questions", "push"], // Fri
-  ["thesis", "questions", "pullLegs"], // Sat
-];
-const DAILY = ["typing", "jobs", "reading", "clean", "dhikr"];
+// All indexed by Date.getDay() (0 = Sunday). The course slot preps the next day's lab.
+const COURSES: string[][] = [["wp"], ["pzsi"], ["iiad"], ["krypto"], ["to"], [], []];
+// Workouts Mon/Wed/Fri/Sat, stretching on the days after a workout
+const BODY_LIGHT = ["stretch", "push", "stretch", "pullLegs", "stretch", "push", "pullLegs"];
+const BODY_KETTLEBELL = ["stretch", "kbPush", "stretch", "kbPullLegs", "stretch", "kbPush", "kbPullLegs"];
 
-const BODY = ["stretch", "push", "stretch", "pullLegs", "stretch", "push", "pullLegs"];
+function bodyFor(key: string, day: number): string {
+  if (key <= BODY_LIGHT_UNTIL) return BODY_LIGHT[day];
+  return key <= BODY_STRETCH_UNTIL ? "stretch" : BODY_KETTLEBELL[day];
+}
 
 function tracksFor(date: Date): string[] {
   const day = date.getDay();
-  const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-  if (key <= PRIORITY_UNTIL) {
-    const uni = UNI_WEEK[day];
-    return [...uni.slice(0, -1), ...DAILY, uni[uni.length - 1]];
-  }
-  return ["backend", "frontend", ...DAILY, BODY[day]];
+  const key = dateKey(date);
+  const body = bodyFor(key, day);
+  const daily = ["typing", key <= CV_UNTIL ? "cv" : "jobs", "reading", "clean", "prayers"];
+
+  if (key <= PHASES.exams) return ["thesis", "questions", ...COURSES[day], ...daily, body];
+  if (key <= PHASES.light) return ["jobs", "reading", "clean", "prayers", body];
+  if (key <= PHASES.buffer) return ["paperwork", ...daily, body];
+  return ["backend", "frontend", ...daily, body];
 }
 
 // Tracks where "step N" means something (others repeat the same task)
-export const PROGRESSIVE_TRACKS = new Set(["push", "pullLegs", "stretch"]);
+export const PROGRESSIVE_TRACKS = new Set(["push", "pullLegs", "stretch", "kbPush", "kbPullLegs"]);
 
 export const MAX_TASKS_PER_DAY = 9;
 
-// Counted tasks (thesis Pomodoros, pages, applications): the unit and the step for the − / + buttons
+// Counted tasks (thesis Pomodoros, pages, applications, prayers): the unit and the step for the − / + buttons
 export function countedTrack(trackId: string | null | undefined) {
   const track = trackId ? TRACKS[trackId] : undefined;
   return track?.unit ? { unit: track.unit, stepBy: track.stepBy ?? 1 } : undefined;
@@ -144,8 +188,11 @@ export function buildDailyPlan(
   examLabel?: string,
   date = new Date(),
 ): Task[] {
+  // Only earlier days: rebuilding today's plan mustn't count today's own ticks as progress
+  const today = dateKey(date);
   const completed = new Map<string, number>();
   for (const day of history) {
+    if (day.date >= today) continue;
     for (const task of day.lockedTasks) {
       if (task.isCompleted && task.trackId) {
         completed.set(task.trackId, (completed.get(task.trackId) ?? 0) + 1);
@@ -188,12 +235,17 @@ export function isCurrentPlan(tasks: Task[], date = new Date()): boolean {
 // Old tracks whose tick still means something on the current plan
 const REPLACED_BY: Record<string, string[]> = { standard: ["reading", "clean"], exam: ["questions"] };
 
-// When today's plan is rebuilt, keep what was already ticked on tracks that are still there
+// When today's plan is rebuilt, keep what was already ticked or logged on tracks that are still there
 export function carryOver(fresh: Task[], old: Task[]): Task[] {
   return fresh.map((task) => {
     const before = old.find(
-      (t) => t.isCompleted && (t.trackId === task.trackId || REPLACED_BY[t.trackId ?? ""]?.includes(task.trackId!)),
+      (t) => t.trackId === task.trackId || (t.isCompleted && REPLACED_BY[t.trackId ?? ""]?.includes(task.trackId!)),
     );
-    return before ? { ...task, isCompleted: true, amount: task.target ?? task.amount } : task;
+    if (!before) return task;
+    if (!task.target) return { ...task, isCompleted: before.isCompleted };
+
+    // An old tick counts as the full target, even from before amounts were logged
+    const amount = Math.max(before.amount ?? 0, before.isCompleted ? task.target : 0);
+    return { ...task, amount, isCompleted: amount >= task.target };
   });
 }

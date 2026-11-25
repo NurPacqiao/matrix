@@ -14,4 +14,6 @@ COPY --from=build /app .
 # set in the Render dashboard (ConnectionStrings__DefaultConnection, Jwt__Key, ...).
 ENV ASPNETCORE_HTTP_PORTS=8080
 EXPOSE 8080
+# Don't run as root (the base image ships this user)
+USER $APP_UID
 ENTRYPOINT ["dotnet", "OhtaniApi.dll"]

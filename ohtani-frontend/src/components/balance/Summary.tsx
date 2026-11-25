@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
-import { DIRECTIONS } from "../data/matrix";
-import { pomosByMonth, summarize, windowTasks, type Tally } from "../lib/summary";
-import type { DayLog } from "../types";
-
-const BAR = "#5b8bd6"; // same validated blue as "This week" on the radar
+import { DIRECTIONS } from "../../data/matrix";
+import { POMODORO_MINUTES, pomosByMonth, summarize, windowTasks, type Tally } from "../../lib/summary";
+import type { DayLog } from "../../types";
+import { CHART } from "./chartColors";
+import MonthBars from "./MonthBars";
 
 type PeriodId = "day" | "week" | "month" | "year";
 
@@ -41,6 +41,7 @@ export default function Summary({ byDate }: { byDate: Map<string, DayLog> }) {
     { label: "Workouts", tally: now.workouts, prev: before?.workouts },
     { label: "Stretching", tally: now.stretches, prev: before?.stretches },
     { label: "Clean days", tally: now.clean, prev: before?.clean },
+    { label: "Prayers", tally: now.prayers, prev: before?.prayers },
     { label: "Dhikr", tally: now.dhikr, prev: before?.dhikr },
     { label: "Whole plan", tally: now.plan, prev: before?.plan, unit: "tasks" },
   ];
@@ -70,7 +71,7 @@ export default function Summary({ byDate }: { byDate: Map<string, DayLog> }) {
       <div className="mt-4 flex items-baseline gap-2">
         <span className="text-3xl font-semibold tabular-nums leading-none">{now.pomos}</span>
         <span className="text-sm text-bone-muted">Pomodoros</span>
-        <span className="text-xs text-bone-faint">≈ {((now.pomos * 20) / 60).toFixed(1)} h</span>
+        <span className="text-xs text-bone-faint">≈ {((now.pomos * POMODORO_MINUTES) / 60).toFixed(1)} h</span>
         {delta !== null && before && before.days > 0 && (
           <span className="ml-auto text-xs text-bone-muted tabular-nums">
             {delta >= 0 ? "+" : "−"}
@@ -87,7 +88,7 @@ export default function Summary({ byDate }: { byDate: Map<string, DayLog> }) {
               <span className="h-2">
                 <span
                   className="block h-full rounded-r"
-                  style={{ width: `${(d.pomos / maxPomos) * 100}%`, background: BAR }}
+                  style={{ width: `${(d.pomos / maxPomos) * 100}%`, background: CHART.thisWeek }}
                 />
               </span>
               <span className="text-right font-mono text-bone tabular-nums">{d.pomos}</span>
@@ -133,59 +134,9 @@ export default function Summary({ byDate }: { byDate: Map<string, DayLog> }) {
         </tbody>
       </table>
       <p className="mt-2 text-[11px] text-bone-faint leading-relaxed">
-        Done / planned. Thesis Pomodoros, pages and applications count what you logged on the counter; other
-        Pomodoros count once the task is ticked.
+        Done / planned. Thesis Pomodoros, pages, applications and prayers count what you logged on the counter;
+        other Pomodoros count once the task is ticked.
       </p>
     </section>
-  );
-}
-
-function MonthBars({ months }: { months: { month: string; pomos: number }[] }) {
-  const [active, setActive] = useState<string | null>(null);
-  const max = Math.max(...months.map((m) => m.pomos), 1);
-  const name = (month: string, style: "narrow" | "long") =>
-    new Date(`${month}-15T12:00:00Z`).toLocaleDateString("en-GB", { month: style });
-
-  return (
-    <div className="mt-5">
-      <p className="text-[11px] text-bone-faint">Pomodoros by month</p>
-      <div className="mt-2 grid grid-cols-12 gap-1.5">
-        {months.map((m) => (
-          <div
-            key={m.month}
-            className="flex flex-col items-center"
-            onMouseEnter={() => setActive(m.month)}
-            onMouseLeave={() => setActive(null)}
-            onClick={() => setActive(active === m.month ? null : m.month)}
-          >
-            <span className={`h-4 font-mono text-[10px] ${active === m.month ? "text-bone" : "text-transparent"}`}>
-              {m.pomos}
-            </span>
-            <div className="mt-1 w-full h-16 flex flex-col justify-end">
-              {m.pomos > 0 ? (
-                <div
-                  className="w-full rounded-t"
-                  style={{
-                    height: `${(m.pomos / max) * 100}%`,
-                    background: BAR,
-                    opacity: active && active !== m.month ? 0.5 : 1,
-                  }}
-                />
-              ) : (
-                <div className="w-full h-px bg-ink-600" />
-              )}
-            </div>
-            <span className={`mt-1.5 text-[10px] ${active === m.month ? "text-bone" : "text-bone-faint"}`}>
-              {name(m.month, "narrow")}
-            </span>
-          </div>
-        ))}
-      </div>
-      {active && (
-        <p className="mt-1 text-[11px] text-bone-muted">
-          {name(active, "long")}: {months.find((m) => m.month === active)?.pomos} Pomodoros
-        </p>
-      )}
-    </div>
   );
 }

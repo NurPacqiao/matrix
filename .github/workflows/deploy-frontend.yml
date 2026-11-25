@@ -10,8 +10,6 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
@@ -31,7 +29,7 @@ jobs:
           cache: npm
           cache-dependency-path: ohtani-frontend/package-lock.json
       - run: npm ci
-      - run: npm run build
+      - run: npm run check # lint, tests and build: nothing broken gets published
         env:
           BASE_PATH: /ohtaniApp/
           # Set under Settings → Secrets and variables → Actions (Variables or Secrets both work)
@@ -44,6 +42,10 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    # Only this job can publish, so a bad npm package in the build job can't
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

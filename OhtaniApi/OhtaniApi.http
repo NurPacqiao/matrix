@@ -1,6 +1,17 @@
-@OhtaniApi_HostAddress = http://localhost:5255
+@host = http://localhost:5255
+@token = PASTE_A_TOKEN_FROM_LOGIN
 
-GET {{OhtaniApi_HostAddress}}/weatherforecast/
-Accept: application/json
+### Health check
+GET {{host}}/
 
-###
+### One day's tasks
+GET {{host}}/api/tasks?date=2026-11-25
+Authorization: Bearer {{token}}
+
+### Last 14 days
+GET {{host}}/api/tasks/history?days=14
+Authorization: Bearer {{token}}
+
+### Matrix
+GET {{host}}/api/matrix
+Authorization: Bearer {{token}}

@@ -15,7 +15,7 @@ export interface Task {
 }
 
 export interface DayLog {
-  date: string; // yyyy-MM-dd (UTC, matches the API)
+  date: string; // yyyy-MM-dd, the user's local day
   lockedTasks: Task[];
   customTasks: Task[];
 }

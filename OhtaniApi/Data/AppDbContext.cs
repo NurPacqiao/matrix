@@ -1,14 +1,22 @@
 using Microsoft.EntityFrameworkCore;
-using OhtaniApi.Models; // We will create this next
+using OhtaniApi.Models;
 
-namespace OhtaniApi.Data
+namespace OhtaniApi.Data;
+
+public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
-    public class AppDbContext : DbContext
-    {
-        public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
+    public DbSet<User> Users => Set<User>();
+    public DbSet<DailyLog> DailyLogs => Set<DailyLog>();
 
-        // These represent the actual tables in your Neon database
-        public DbSet<User> Users { get; set; }
-        public DbSet<DailyLog> DailyLogs { get; set; }
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<User>().HasIndex(u => u.GoogleId).IsUnique();
+
+        modelBuilder.Entity<DailyLog>(log =>
+        {
+            // One log per user per day. Also serves every lookup the API makes.
+            log.HasIndex(d => new { d.UserId, d.Date }).IsUnique();
+            log.HasOne<User>().WithMany().HasForeignKey(d => d.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
     }
 }

@@ -1,63 +1,29 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using OhtaniApi.Data;
-using OhtaniApi.Models;
-using System.Security.Claims;
+using OhtaniApi.Contracts;
+using OhtaniApi.Extensions;
+using OhtaniApi.Services;
 
-namespace OhtaniApi.Controllers
+namespace OhtaniApi.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+public sealed class MatrixController(MatrixService matrix) : ControllerBase
 {
-    [Authorize]
-    [ApiController]
-    [Route("api/[controller]")]
-    public class MatrixController : ControllerBase
+    [HttpGet]
+    public async Task<ActionResult<MatrixResponse>> Get(CancellationToken ct)
     {
-        private readonly AppDbContext _context;
-
-        public MatrixController(AppDbContext context)
-        {
-            _context = context;
-        }
-
-        [HttpGet]
-        public async Task<IActionResult> GetMatrix()
-        {
-            // 1. Find the user based on their Google Token
-            var user = await GetCurrentUserAsync();
-            
-            if (user == null) return Unauthorized();
-
-            // 2. Return their saved Matrix string (or empty brackets if null)
-            return Ok(new { matrixJson = user.MatrixJson ?? "[]" });
-        }
-
-        [HttpPost]
-        public async Task<IActionResult> SaveMatrix([FromBody] MatrixRequest request)
-        {
-            // 1. Find the user
-            var user = await GetCurrentUserAsync();
-            
-            if (user == null) return Unauthorized();
-
-            // 2. Update their Matrix compartment and save to database
-            user.MatrixJson = request.MatrixJson;
-            await _context.SaveChangesAsync();
-            
-            return Ok();
-        }
-
-        // The JWT from AuthController stores our database User.Id (not the Google id) in NameIdentifier
-        private async Task<User?> GetCurrentUserAsync()
-        {
-            var idClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (!int.TryParse(idClaim, out var userId)) return null;
-            return await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
-        }
+        var json = await matrix.GetAsync(User.GetUserId(), ct);
+        return json is null ? Unauthorized() : new MatrixResponse(json);
     }
 
-    // A small helper box to catch the incoming JSON string from React
-    public class MatrixRequest
+    [HttpPost]
+    public async Task<IActionResult> Save(MatrixRequest request, CancellationToken ct)
     {
-        public string MatrixJson { get; set; } = string.Empty;
+        if (!MatrixService.IsValid(request.MatrixJson))
+        {
+            ModelState.AddModelError(nameof(request.MatrixJson), "Must be a JSON object.");
+            return ValidationProblem();
+        }
+        return await matrix.SaveAsync(User.GetUserId(), request.MatrixJson, ct) ? Ok() : Unauthorized();
     }
 }

@@ -46,6 +46,9 @@ namespace OhtaniApi.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("UserId", "Date")
+                        .IsUnique();
+
                     b.ToTable("DailyLogs");
                 });
 
@@ -74,7 +77,19 @@ namespace OhtaniApi.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("GoogleId")
+                        .IsUnique();
+
                     b.ToTable("Users");
+                });
+
+            modelBuilder.Entity("OhtaniApi.Models.DailyLog", b =>
+                {
+                    b.HasOne("OhtaniApi.Models.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 #pragma warning restore 612, 618
         }

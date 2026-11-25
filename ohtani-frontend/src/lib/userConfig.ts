@@ -1,6 +1,6 @@
-import api from "../api";
 import { DEFAULT_CELL_TEXTS } from "../data/matrix";
 import type { Timetable } from "../data/timetable";
+import { api } from "./api";
 
 /**
  * Everything personal: the 81 matrix cells, the wording of plan tasks, and the class timetable.
@@ -34,11 +34,12 @@ interface CellUpdate {
 
 type PersonalFile = UserConfig & { cellUpdates?: CellUpdate[] };
 
-// Vite returns an empty object when the folder doesn't exist (CI builds, other machines)
-const privateFiles = import.meta.glob<PersonalFile>("../data/private/personal.json", {
-  eager: true,
-  import: "default",
-});
+// Dev server only. Without the DEV check a build on this machine would bundle the private
+// file into dist/, where it could be published by accident. Vite returns an empty object
+// when the folder doesn't exist (CI builds, other machines).
+const privateFiles: Record<string, PersonalFile> = import.meta.env.DEV
+  ? import.meta.glob<PersonalFile>("../data/private/personal.json", { eager: true, import: "default" })
+  : {};
 const PERSONAL_FILE: PersonalFile | undefined = Object.values(privateFiles)[0];
 const CELL_UPDATES = PERSONAL_FILE?.cellUpdates ?? [];
 // The config part only, so the one-time seed doesn't store cellUpdates in the database
@@ -56,20 +57,28 @@ const fillCells = (cells: unknown): string[] =>
     return typeof text === "string" && text.trim() ? text : fallback;
   });
 
+// What the grid shows when the API can't be reached. Saving it is refused (see saveConfig).
 export const EMPTY_CONFIG: UserConfig = {
   cells: [...DEFAULT_CELL_TEXTS],
   tracks: {},
   timetable: {},
 };
 
-export async function loadConfig(): Promise<UserConfig> {
-  const response = await api.get<{ matrixJson: string }>("/matrix");
-  let stored: { version?: number } & Partial<UserConfig> = {};
-  try {
-    stored = JSON.parse(response.data.matrixJson ?? "") ?? {};
-  } catch {
-    // Unreadable: treat as empty
+type StoredConfig = { version?: number } & Partial<UserConfig>;
+
+// Throws rather than guessing: treating a config we can't read as empty would let the next
+// save overwrite it.
+function parseStored(matrixJson: string | null): StoredConfig {
+  const stored = JSON.parse(matrixJson || "{}") as StoredConfig | null;
+  if ((stored?.version ?? 0) > VERSION) {
+    throw new Error("The saved matrix is from a newer version of the app. Reload to update.");
   }
+  return stored ?? {};
+}
+
+export async function loadConfig(): Promise<UserConfig> {
+  const { matrixJson } = await api.get<{ matrixJson: string | null }>("/matrix");
+  const stored = parseStored(matrixJson);
 
   if (stored.version === VERSION) {
     const config: UserConfig = {
@@ -104,9 +113,14 @@ export async function loadConfig(): Promise<UserConfig> {
     return seeded;
   }
 
-  return { ...EMPTY_CONFIG, cells: fillCells(olderCells) };
+  return { cells: fillCells(olderCells), tracks: {}, timetable: {} };
 }
 
 export async function saveConfig(config: UserConfig): Promise<void> {
-  await api.post("/matrix", { matrixJson: JSON.stringify({ version: VERSION, ...config }) });
+  // Still the placeholder's own objects, so the real config never loaded (say, the API was
+  // asleep). Saving would replace the whole grid and timetable with placeholders.
+  if (config.tracks === EMPTY_CONFIG.tracks) {
+    throw new Error("The grid hasn't loaded, so it can't be saved.");
+  }
+  await api.post("/matrix", { matrixJson: JSON.stringify({ ...config, version: VERSION }) });
 }

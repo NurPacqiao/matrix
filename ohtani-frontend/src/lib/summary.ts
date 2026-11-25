@@ -1,5 +1,5 @@
 import type { DayLog, Task } from "../types";
-import { utcDateKey } from "./dates";
+import { dateKey, dateKeyDaysAgo } from "./dates";
 import { countsPomos } from "./plan";
 
 /**
@@ -27,18 +27,24 @@ export interface Summary {
   workouts: Tally;
   stretches: Tally;
   clean: Tally;
-  dhikr: Tally;
+  prayers: Tally; // done = prayers logged
+  dhikr: Tally; // days; since prayers joined it, the day's combined task
   plan: Tally;
 }
 
+export const POMODORO_MINUTES = 20;
+
 const OLD_STANDARD_PAGES = 10;
+const DEFAULT_APPLICATIONS = 3;
+const DAILY_PRAYERS = 5;
+
+// "Thesis: 3 Pomodoros" → 3, for days from before the plan stored Pomodoros
+const pomosInText = (text: string) => Number(text.match(/(\d+)\s*Pomodoros?/i)?.[1] ?? 0);
 
 export function taskPomos(task: Task): number {
   if (countsPomos(task.trackId) && task.amount != null) return task.amount;
   if (!task.isCompleted) return 0;
-  if (task.pomos != null) return task.pomos;
-  const match = task.text.match(/(\d+)\s*Pomodoros?/i);
-  return match ? Number(match[1]) : 0;
+  return task.pomos ?? pomosInText(task.text);
 }
 
 // Counted tasks: the amount logged, or the target when it was ticked before amounts existed
@@ -62,6 +68,7 @@ export function summarize(tasksByDay: Task[][]): Summary {
     workouts: tally(),
     stretches: tally(),
     clean: tally(),
+    prayers: tally(),
     dhikr: tally(),
     plan: tally(),
   };
@@ -77,16 +84,18 @@ export function summarize(tasksByDay: Task[][]): Summary {
       }
       switch (task.trackId) {
         case "thesis":
-          add(s.thesis, pomos, task.target ?? Number(task.text.match(/(\d+)\s*Pomodoros?/i)?.[1] ?? 0));
+          add(s.thesis, pomos, task.target ?? pomosInText(task.text));
           break;
         case "reading":
           add(s.pages, logged(task, OLD_STANDARD_PAGES), task.target ?? OLD_STANDARD_PAGES);
           break;
         case "jobs":
-          add(s.applications, logged(task, 3), task.target ?? 3);
+          add(s.applications, logged(task, DEFAULT_APPLICATIONS), task.target ?? DEFAULT_APPLICATIONS);
           break;
         case "push":
         case "pullLegs":
+        case "kbPush":
+        case "kbPullLegs":
           add(s.workouts, task.isCompleted);
           break;
         case "stretch":
@@ -95,7 +104,11 @@ export function summarize(tasksByDay: Task[][]): Summary {
         case "clean":
           add(s.clean, task.isCompleted);
           break;
-        case "dhikr":
+        case "prayers":
+          add(s.prayers, logged(task, DAILY_PRAYERS), task.target ?? DAILY_PRAYERS);
+          add(s.dhikr, task.isCompleted);
+          break;
+        case "dhikr": // the plain tick from before prayers were counted
           add(s.dhikr, task.isCompleted);
           break;
         case "standard": // the old "read 10 pages · no short-form video" task
@@ -108,17 +121,17 @@ export function summarize(tasksByDay: Task[][]): Summary {
   return s;
 }
 
-// Plan tasks for `length` days ending `endDaysAgo` days before today (UTC, like the API)
+// Plan tasks for `length` days ending `endDaysAgo` days before today
 export function windowTasks(byDate: Map<string, DayLog>, length: number, endDaysAgo = 0): Task[][] {
-  return Array.from({ length }, (_, i) => byDate.get(utcDateKey(endDaysAgo + i))?.lockedTasks ?? []);
+  return Array.from({ length }, (_, i) => byDate.get(dateKeyDaysAgo(endDaysAgo + i))?.lockedTasks ?? []);
 }
 
 // Pomodoros per calendar month for the last 12 months, oldest first
 export function pomosByMonth(byDate: Map<string, DayLog>): { month: string; pomos: number }[] {
   const now = new Date();
   const months = Array.from({ length: 12 }, (_, i) => {
-    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (11 - i), 1));
-    return { month: d.toISOString().slice(0, 7), pomos: 0 };
+    const firstOfMonth = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
+    return { month: dateKey(firstOfMonth).slice(0, 7), pomos: 0 };
   });
   const index = new Map(months.map((m, i) => [m.month, i]));
   for (const [date, day] of byDate) {

@@ -1,8 +1,6 @@
 import { useEffect } from "react";
 import AppMark from "./AppMark";
 
-const APP_VERSION = "0.8.0";
-
 interface ProfilePanelProps {
   open: boolean;
   email: string | null;
@@ -19,7 +17,7 @@ export default function ProfilePanel({ open, email, onClose, onSignOut }: Profil
   }, [open, onClose]);
 
   return (
-    <div className={`fixed inset-0 z-40 ${open ? "" : "pointer-events-none"}`} aria-hidden={!open}>
+    <div className={`fixed inset-0 z-40 ${open ? "" : "pointer-events-none"}`} inert={!open}>
       <div
         onClick={onClose}
         className={`absolute inset-0 bg-black/60 transition-opacity duration-200 ${open ? "opacity-100" : "opacity-0"}`}
@@ -59,7 +57,7 @@ export default function ProfilePanel({ open, email, onClose, onSignOut }: Profil
             or a stretch.
           </p>
           <p className="text-bone-faint text-xs leading-relaxed">
-            Days follow UTC, so a new day starts at 01:00 in Poland (02:00 in summer).
+            Days follow this device's clock, so a new day starts at your midnight.
           </p>
         </div>
 
@@ -70,7 +68,7 @@ export default function ProfilePanel({ open, email, onClose, onSignOut }: Profil
           >
             Sign out
           </button>
-          <p className="mt-4 text-center font-mono text-[11px] text-bone-faint">Matrix v{APP_VERSION}</p>
+          <p className="mt-4 text-center font-mono text-[11px] text-bone-faint">Matrix v{__APP_VERSION__}</p>
         </div>
       </aside>
     </div>
