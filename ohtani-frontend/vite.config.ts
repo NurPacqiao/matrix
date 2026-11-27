@@ -37,7 +37,7 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react(), contentSecurityPolicy(apiUrl)],
     define: { __APP_VERSION__: JSON.stringify(version) },
-    // GitHub Pages serves the app from /ohtaniApp/, so the deploy workflow sets BASE_PATH.
+    // GitHub Pages serves the app from /matrix/, so the deploy workflow sets BASE_PATH.
     // Local dev stays at /.
     base: process.env.BASE_PATH ?? '/',
   }
