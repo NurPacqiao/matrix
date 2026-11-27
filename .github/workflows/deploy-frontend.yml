@@ -35,7 +35,7 @@ jobs:
           # Set under Settings → Secrets and variables → Actions (Variables or Secrets both work)
           VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID || secrets.VITE_GOOGLE_CLIENT_ID }}
           VITE_API_URL: ${{ vars.VITE_API_URL || secrets.VITE_API_URL }}
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: ohtani-frontend/dist
 
